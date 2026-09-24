@@ -1,0 +1,18 @@
+# Everything derived from id's game data - see "License, and what not to
+# redistribute" in README.md. None of this may be published. (The code,
+# tools/wolf_tables.py included, is GPL and belongs in the repository.)
+# your game files - all but the empty placeholder that marks where they go,
+# which keeps the folder in the repository
+gamedata/*
+!gamedata/PUT_YOUR_GAME_FILES_HERE.txt
+assets/
+build/
+*.z64
+*.ram
+
+# The extractor's caches
+__pycache__/
+*.pyc
+
+# The build window's remembered choices - your own folders
+build-gui.json

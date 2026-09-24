@@ -1,0 +1,23 @@
+# The libdragon SDK, built on top of the official toolchain image.
+#
+# The published ghcr.io/dragonminded/libdragon image carries only the mips64-elf
+# cross compiler - the library, its IPL3 and its tools (n64tool, chksum64,
+# mkasset, ...) are built from source. This bakes them into /n64_toolchain so a
+# project build is just:
+#
+#   docker run --rm -v "<project>:/src" -w /src n64-libdragon make
+#
+# build.ps1 builds it the first time it is needed; by hand:
+#   docker build -f tools/Dockerfile.libdragon -t n64-libdragon tools
+FROM ghcr.io/dragonminded/libdragon:latest
+
+# Pin to a commit for reproducible builds; "trunk" tracks upstream.
+ARG LIBDRAGON_REF=trunk
+
+RUN git clone https://github.com/DragonMinded/libdragon.git /libdragon \
+    && cd /libdragon \
+    && git checkout "${LIBDRAGON_REF}" \
+    && ./build.sh
+
+ENV N64_INST=/n64_toolchain
+WORKDIR /src

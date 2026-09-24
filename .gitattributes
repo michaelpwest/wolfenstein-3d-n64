@@ -1,0 +1,7 @@
+# Shell scripts keep Unix line endings wherever they are checked out: bash
+# on macOS and Linux (and inside the build container) cannot run them with
+# CRLF, which git on Windows would otherwise give them.
+*.sh text eol=lf
+
+# And batch files keep Windows ones, which cmd.exe expects.
+*.cmd text eol=crlf
