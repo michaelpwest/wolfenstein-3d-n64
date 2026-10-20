@@ -6,13 +6,14 @@
  * first door, open it, walk through - and writes a PPM per captured frame,
  * which tools/sheet.py turns into a contact sheet.
  *
- * Build and run through tools/sim.ps1.
+ * Build and run through ./build.sh --sim (tools/sim.sh).
  */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/wolf.h"
+#include "../src/pcspeaker.h"
 
 static uint8_t *blob;
 static char     outdir[512];
@@ -79,8 +80,8 @@ void platform_read_big(uint32_t offset, void *dst, uint32_t len)
 /* ------------------------------------------------------------------ */
 
 static struct {
-    int adlib_calls, digi_calls, vol_calls, music_calls;
-    int last_adlib, last_digi, last_lvol, last_rvol, last_music;
+    int adlib_calls, digi_calls, vol_calls, music_calls, pc_calls;
+    int last_adlib, last_digi, last_lvol, last_rvol, last_music, last_pc;
     bool music_paused;
     int count_by_sound[100];
 } sb;
@@ -91,6 +92,14 @@ void snd_backend_adlib(int sound)
     sb.last_adlib = sound;
     if (sound >= 0 && sound < 100)
         sb.count_by_sound[sound]++;
+}
+
+void snd_backend_pc(int sound)
+{
+    if (sound < 0)
+        return;                         /* a stop */
+    sb.pc_calls++;
+    sb.last_pc = sound;
 }
 
 void snd_backend_digi(int digi, int lvol, int rvol)
@@ -119,6 +128,54 @@ void snd_backend_music(int song)
 void snd_backend_music_pause(bool paused)
 {
     sb.music_paused = paused;
+}
+
+/* src/pcspeaker.c on one of the extracted PC Speaker sounds: that it lasts
+ * its bytes at 140 Hz, and that its first tone is at 1193181 / (60 b) Hz,
+ * counted from where the square wave crosses zero. */
+static void pc_speaker_check(int sound)
+{
+    static int16_t out[PCS_RATE * 8];
+    uint8_t chunk[8192];
+    char path[64];
+    size_t size;
+    uint32_t length;
+    int total = 0, first = 0, run = 1, s0, s1, crossings = 0, peak = 0;
+    FILE *f;
+
+    snprintf(path, sizeof path, "assets/audio/pc%02d.pcs", sound);
+    if (!(f = fopen(path, "rb"))) {
+        printf("  PC Speaker synth: NO %s\n", path);
+        return;
+    }
+    size = fread(chunk, 1, sizeof chunk, f);
+    fclose(f);
+    length = chunk[0] | chunk[1] << 8 | chunk[2] << 16 | (uint32_t)chunk[3] << 24;
+
+    pcs_play(chunk, (uint32_t)size);
+    while (pcs_active() && total + 256 <= (int)(sizeof out / sizeof *out)) {
+        pcs_generate(out + total, 256);
+        total += 256;
+    }
+    for (int i = 0; i < total; i++)
+        if (abs(out[i]) > peak)
+            peak = abs(out[i]);
+
+    /* the first tone, and how many ticks it holds */
+    while (first < (int)length && !chunk[6 + first])
+        first++;
+    while (first + run < (int)length && chunk[6 + first + run] == chunk[6 + first])
+        run++;
+    s0 = (int)(first * (PCS_RATE / 140.0)) + 4;
+    s1 = (int)((first + run) * (PCS_RATE / 140.0)) - 4;
+    for (int i = s0 + 1; i < s1; i++)
+        if ((out[i - 1] < 0) != (out[i] < 0))
+            crossings++;
+    printf("  PC Speaker synth: %u ticks, sounding %.3f s (expect %.3f), peak %d;"
+           " first tone %d for %d ticks: %.0f Hz (expect %.0f)\n",
+           (unsigned)length, total / (double)PCS_RATE, (length + 1) / 140.0, peak,
+           chunk[6 + first], run, crossings / 2.0 / ((s1 - s0) / (double)PCS_RATE),
+           1193181.0 / (60.0 * chunk[6 + first]));
 }
 
 /* The sign-on screen's hardware, as main.c reports it for a console without
@@ -1294,6 +1351,11 @@ static void flow_tests(void)
         game_tic(&c, &none);
     capture("flow_psyched_half");
     run_until(PH_PSYCHED, 100, &none);
+    for (t = 0; t < 17; t++)                /* the bar half filled... */
+        game_tic(&c, &none);
+    capture("flow_psyched_loading");
+    for (t = 0; t < 20; t++)                /* ...and full */
+        game_tic(&c, &none);
     capture("flow_psyched");
     run_until(PH_FIZZLE_IN, 200, &none);
     run_until(PH_FADE_IN, 100, &none);
@@ -1391,7 +1453,7 @@ static void flow_tests(void)
     menu_press(&down, 40);                  /* Sound (the gun was on New Game) */
     menu_press(&press, 40);
     capture("menu_sound");
-    for (int i = 0; i < 4; i++)             /* 0 -> 1 -> 5 -> 6 -> 10 */
+    for (int i = 0; i < 5; i++)             /* 0 -> 1 -> 2 -> 5 -> 6 -> 10 */
         menu_press(&down, 40);
     menu_press(&press, 40);
     capture("menu_sound_music_off");
@@ -1403,7 +1465,7 @@ static void flow_tests(void)
            sb.last_music);
     capture("menu_sound_music_on");
     {
-        int effects[2], digi[2];
+        int effects[3], digi[2];
         for (int i = 0; i < 3; i++)         /* 11 -> 10 -> 6 -> 5 */
             menu_press(&up, 40);
         menu_press(&press, 40);
@@ -1411,17 +1473,35 @@ static void flow_tests(void)
         menu_press(&down, 40);              /* 6 */
         menu_press(&press, 40);
         digi[1] = sd_digi_on;
-        for (int i = 0; i < 3; i++)         /* 6 -> 5 -> 1 -> 0 */
+        for (int i = 0; i < 4; i++)         /* 6 -> 5 -> 2 -> 1 -> 0 */
             menu_press(&up, 40);
         menu_press(&press, 40);
-        effects[0] = sd_effects_on;
+        effects[0] = sd_effects;
         capture("menu_sound_effects_off");
-        menu_press(&down, 40);              /* 1 */
+        menu_press(&down, 40);              /* 1, PC Speaker */
         menu_press(&press, 40);
-        effects[1] = sd_effects_on;
+        effects[1] = sd_effects;
+        printf("    PC Speaker: digitized %d, music %d (expect 0 0, as a PC with no"
+               " sound card)\n", sd_digi_on, sd_music_on);
+        capture("menu_sound_pc_speaker");
+        menu_press(&down, 40);              /* 2, AdLib */
+        menu_press(&press, 40);
+        effects[2] = sd_effects;
         printf("    digitized None %d then Nintendo 64 Audio %d (expect 0 1); effects None"
-               " %d then Nintendo 64 Audio %d (expect 0 1)\n", digi[0], digi[1],
-               effects[0], effects[1]);
+               " %d, PC Speaker %d, AdLib %d (expect %d %d %d)\n", digi[0], digi[1],
+               effects[0], effects[1], effects[2], SD_FX_OFF, SD_FX_PC, SD_FX_ADLIB);
+        /* AdLib leaves them as they are: both back on by hand, as a player
+         * would, for the rest of the run */
+        printf("    AdLib after it: digitized %d, music %d (expect 0 0)\n",
+               sd_digi_on, sd_music_on);
+        for (int i = 0; i < 2; i++)         /* 2 -> 5 -> 6 */
+            menu_press(&down, 40);
+        menu_press(&press, 40);
+        for (int i = 0; i < 2; i++)         /* 6 -> 10 -> 11 */
+            menu_press(&down, 40);
+        menu_press(&press, 40);
+        printf("    and turned back on: digitized %d, music %d, last music %d (expect"
+               " 1 1 %d)\n", sd_digi_on, sd_music_on, sb.last_music, WONDERIN_MUS);
     }
     menu_press(&back, 40);
 
@@ -3385,6 +3465,33 @@ int main(int argc, char **argv)
         for (int t = 0; t < 200; t++) sd_update(1);
         printf("  FM voice free after it ends: %s\n",
                sd_sound_playing() ? "NO (wrong)" : "yes (right)");
+
+        /* the PC Speaker in the FM voice's place: the PC versions, with
+         * their own lengths, and a recording still a recording */
+        {
+            const int ammo = (int)wolf_sound_map[GETAMMOSND];
+            const int pc_tics = (int)(wolf_pc_info[ammo] & 0xffff);
+            int t = 0, pc0, fm0, dg0;
+
+            sd_init();
+            sd_set_effects(SD_FX_PC);
+            pc0 = sb.pc_calls; fm0 = sb.adlib_calls; dg0 = sb.digi_calls;
+            sd_play_sound(GETAMMOSND);
+            while (sd_sound_playing() && t < 1000) {
+                sd_update(1);
+                t++;
+            }
+            sd_play_sound(ATKPISTOLSND);
+            printf("  PC Speaker effects: GETAMMO on the speaker %s and not the FM %s,"
+                   " busy %d tics (its PC version's %d, its AdLib one's %d);"
+                   " ATKPISTOL digitized %s\n",
+                   sb.pc_calls == pc0 + 1 && sb.last_pc == ammo ? "yes" : "NO",
+                   sb.adlib_calls == fm0 ? "yes" : "NO", t, pc_tics,
+                   (int)(wolf_sound_info[ammo] & 0xffff),
+                   sb.digi_calls == dg0 + 1 ? "yes" : "NO");
+            sd_set_effects(SD_FX_ADLIB);
+            pc_speaker_check(ammo);
+        }
 
         /* the door by the spawn: open it and turn round while it sounds */
         level_load(0);

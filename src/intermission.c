@@ -370,18 +370,36 @@ void intermission_new_game(void)
 /* PreloadGraphics() - WL_GAME.C                                       */
 /* ------------------------------------------------------------------ */
 
-/* "Get Psyched!" in a window with PreloadUpdate()'s progress bar under it.
- * Nothing needs loading from a cartridge, so the bar is drawn full, as it
- * looked for the moment before the screen faded on a fast PC. */
+/* "Get Psyched!" in a window with PreloadUpdate()'s progress bar under it,
+ * empty as it fades in. */
+#define PSYCHED_X   (160 - 14 * 8)              /* WindowX, WindowY ... */
+#define PSYCHED_Y   (80 - 3 * 8)
+#define PSYCHED_W   (28 * 8)
+#define PSYCHED_H   48
+
 void psyched_start(void)
 {
-    const int wx = 160 - 14 * 8, wy = 80 - 3 * 8, ww = 28 * 8, wh = 48;
-    const int w = ww - 10;
-
     clear_screen();
-    draw_pic(wx, wy, PIC_GETPSYCHED);          /* LatchDrawPic(20-14,80-3*8) */
-    view_bar(wx + 5, wy + wh - 3 + YOFFSET, w, 2, 0x37);
-    view_bar(wx + 5, wy + wh - 3 + YOFFSET, w - 1, 1, 0x32);
+    draw_pic(PSYCHED_X, PSYCHED_Y, PIC_GETPSYCHED);    /* LatchDrawPic(20-14,80-3*8) */
+    psyched_bar(0, 1);
+}
+
+/* PreloadUpdate(current, total): the bar black, then filled as far as
+ * current is of total. DOS called it as PM_Preload() read the floor's
+ * pages; nothing needs reading from a cartridge, so game.c fills it over
+ * the time a PC of the day took (PSYCHED_FILL). */
+void psyched_bar(int current, int total)
+{
+    const int x = PSYCHED_X + 5, y = PSYCHED_Y + PSYCHED_H - 3 + YOFFSET;
+    int w = PSYCHED_W - 10;
+
+    view_bar(x, y, w, 2, 0);                    /* BLACK */
+    w = w * current / total;
+    if (w) {
+        view_bar(x, y, w, 2, 0x37);             /* SECONDCOLOR */
+        if (w > 1)
+            view_bar(x, y, w - 1, 1, 0x32);
+    }
 }
 
 /* ------------------------------------------------------------------ */

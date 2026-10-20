@@ -11,6 +11,10 @@
  * Built with SFX=wav, each effect is instead a wav64 rendered at build time
  * by tools/audio/render_audio.c.
  *
+ * With the PC Speaker chosen in the Sound menu, the effects are its
+ * versions instead, synthesized the same way - src/pcspeaker.c's square
+ * waves, from their AUDIOT chunks - on a channel of their own.
+ *
  * The music is sequenced (tools/audio/imf2xm.c): each song is an XM module
  * of recorded OPL instruments, one mixer channel for each OPL channel the
  * songs use, played by xm64player with its samples streamed off the
@@ -21,6 +25,7 @@
 #include <stdlib.h>
 #include "wolf.h"
 #include "adlib.h"
+#include "pcspeaker.h"
 
 #define AUDIO_RATE   22050
 
@@ -36,20 +41,24 @@
 #define MUSIC_CHANNELS 8                /* imf2xm's CHANNELS */
 #endif
 
-enum { CH_ADLIB, CH_DIGI, CH_MUSIC, NUM_CHANNELS = CH_MUSIC + MUSIC_CHANNELS };
+enum { CH_ADLIB, CH_DIGI, CH_PC, CH_MUSIC, NUM_CHANNELS = CH_MUSIC + MUSIC_CHANNELS };
 
 #define NUM_SONGS  27
+
+/* An effect's AUDIOT chunk, read into memory whole */
+typedef struct {
+    uint8_t *data;
+    uint32_t size;
+} sound_chunk_t;
 
 #ifdef WOLF_SFX_WAV
 static wav64_t *adlib_wav;              /* one per sound */
 #else
-typedef struct {
-    uint8_t *data;
-    uint32_t size;
-} adlib_chunk_t;
-static adlib_chunk_t *adlib_chunks;     /* one per sound */
+static sound_chunk_t *adlib_chunks;     /* one per sound */
 static waveform_t     adlib_wave;
 #endif
+static sound_chunk_t *pc_chunks;        /* one per sound */
+static waveform_t     pc_wave;
 static wav64_t *digi_wav;               /* one per recording, when present */
 static bool    *digi_ok;
 static bool     song_present[NUM_SONGS];
@@ -81,6 +90,29 @@ static void adlib_read(void *ctx, samplebuffer_t *sbuf, int wpos, int wlen,
 }
 #endif
 
+/* The PC Speaker's channel, the same way */
+static void pc_read(void *ctx, samplebuffer_t *sbuf, int wpos, int wlen, bool seeking)
+{
+    (void)ctx; (void)wpos; (void)seeking;
+    pcs_generate(samplebuffer_append(sbuf, wlen), wlen);
+}
+
+/* A whole file off the cartridge, into memory */
+static void read_chunk(const char *path, sound_chunk_t *c)
+{
+    FILE *f = fopen(path, "rb");
+    long len;
+
+    assertf(f, "missing %s", path);
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    c->data = malloc(len ? len : 1);
+    assertf(c->data && fread(c->data, 1, len, f) == (size_t)len, "cannot read %s", path);
+    c->size = (uint32_t)len;
+    fclose(f);
+}
+
 void n64audio_init(void)
 {
     char path[64];
@@ -101,19 +133,8 @@ void n64audio_init(void)
     /* The 81 to 87 chunks come to about 11 KB; keep them in memory. */
     adlib_chunks = calloc(wolf_num_sounds, sizeof *adlib_chunks);
     for (int s = 0; s < wolf_num_sounds; s++) {
-        FILE *f;
-        long len;
         snprintf(path, sizeof path, "rom:/sfx/al%02d.adl", s);
-        f = fopen(path, "rb");
-        assertf(f, "missing %s", path);
-        fseek(f, 0, SEEK_END);
-        len = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        adlib_chunks[s].data = malloc(len);
-        assertf(adlib_chunks[s].data && fread(adlib_chunks[s].data, 1, len, f) == (size_t)len,
-                "cannot read %s", path);
-        adlib_chunks[s].size = (uint32_t)len;
-        fclose(f);
+        read_chunk(path, &adlib_chunks[s]);
     }
     adlib_reset();
     /* the synth's rate is above the mixer's default limit of the output
@@ -124,6 +145,17 @@ void n64audio_init(void)
         .len = WAVEFORM_UNKNOWN_LEN, .loop_len = 0, .read = adlib_read,
     };
 #endif
+
+    /* The PC Speaker versions: smaller still, a byte per tick */
+    pc_chunks = calloc(wolf_num_sounds, sizeof *pc_chunks);
+    for (int s = 0; s < wolf_num_sounds; s++) {
+        snprintf(path, sizeof path, "rom:/sfx/pc%02d.pcs", s);
+        read_chunk(path, &pc_chunks[s]);
+    }
+    pc_wave = (waveform_t){
+        .name = "pcspeaker", .bits = 16, .channels = 1, .frequency = PCS_RATE,
+        .len = WAVEFORM_UNKNOWN_LEN, .loop_len = 0, .read = pc_read,
+    };
 
     digi_wav = calloc(wolf_num_digi, sizeof *digi_wav);
     digi_ok  = calloc(wolf_num_digi, sizeof *digi_ok);
@@ -163,6 +195,20 @@ void n64audio_poll(void)
     if (!adlib_active() && mixer_ch_playing(CH_ADLIB))
         mixer_ch_stop(CH_ADLIB);
 #endif
+    if (!pcs_active() && mixer_ch_playing(CH_PC))
+        mixer_ch_stop(CH_PC);
+}
+
+/* As SDL_PCPlaySound() and SDL_PCStopSound() */
+void snd_backend_pc(int sound)
+{
+    if (sound < 0 || sound >= wolf_num_sounds) {
+        pcs_stop();
+        return;
+    }
+    pcs_play(pc_chunks[sound].data, pc_chunks[sound].size);
+    if (!mixer_ch_playing(CH_PC))
+        mixer_ch_play(CH_PC, &pc_wave);
 }
 
 /* ------------------------------------------------------------------ */
@@ -215,7 +261,7 @@ void snd_backend_digi_volume(int lvol, int rvol)
 
 void snd_backend_music(int song)
 {
-    if (song == current_song && mixer_ch_playing(CH_MUSIC)) {
+    if (song >= 0 && song == current_song && mixer_ch_playing(CH_MUSIC)) {
         /* StartMusic() restarts even the same song, from the top. */
         mixer_ch_set_pos(CH_MUSIC, 0);
         return;
@@ -251,8 +297,10 @@ void snd_backend_music(int song)
 {
     char path[64];
 
-    if (song == current_song) {
-        /* StartMusic() restarts even the same song, from the top. */
+    /* StartMusic() restarts even the same song, from the top. (Not "no
+     * song" again: with music off, current_song is -1 too, and there is no
+     * module open to restart - which is what music saved off did at boot.) */
+    if (song >= 0 && song == current_song) {
         xm64player_seek(&song_player, 0, 0, 0);
         song_player.stop_requested = false;
         xm64player_play(&song_player, CH_MUSIC);

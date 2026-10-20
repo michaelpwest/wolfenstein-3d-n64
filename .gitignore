@@ -13,6 +13,3 @@ build/
 # The extractor's caches
 __pycache__/
 *.pyc
-
-# The build window's remembered choices - your own folders
-build-gui.json

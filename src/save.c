@@ -959,7 +959,7 @@ static void read_config(void)
     if (memcmp(c, CONFIG_MAGIC, 4) || crc32(c + 8, 8) != read32(c + 4))
         return;
     set_view_size(c[8]);
-    sd_set_effects(c[9] != 0);
+    sd_set_effects(c[9]);                   /* 0 off, 1 AdLib, 2 PC Speaker */
     sd_set_digi(c[10] != 0);
     sd_set_music(c[11] != 0);
     opt_show_fps      = (c[12] & OPT_FPS) != 0;
@@ -978,7 +978,7 @@ static void write_config(uint8_t *to)
     memset(c, 0, CONFIG_BYTES);
     memcpy(c, CONFIG_MAGIC, 4);
     c[8]  = (uint8_t)view_size;
-    c[9]  = sd_effects_on;
+    c[9]  = (uint8_t)sd_effects;
     c[10] = sd_digi_on;
     c[11] = sd_music_on;
     c[12] = (uint8_t)((opt_show_fps ? OPT_FPS : 0)

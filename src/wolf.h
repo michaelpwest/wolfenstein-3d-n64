@@ -13,8 +13,8 @@
 #include <stdbool.h>
 
 /* The port's own version - not the DOS game's, whose "v1.4" is on the
- * sign-on screen. build.ps1 and build.sh read it from this line. */
-#define PORT_VERSION     "1.0.0"
+ * sign-on screen. build.sh reads it from this line. */
+#define PORT_VERSION     "1.1.0"
 
 /* ------------------------------------------------------------------ */
 /* Map, from WL_DEF.H                                                  */
@@ -744,11 +744,15 @@ extern const uint32_t *wolf_music_roles;
 #define URAHERO_MUS   ((int)wolf_music_roles[MUSROLE_VICTORY])  /* victory      */
 #define XTHEEND_MUS   ((int)wolf_music_roles[MUSROLE_THEEND])   /* Spear's end  */
 
-/* The Sound menu's three settings: SD_SetSoundMode() (AdLib effects on or
- * off), SD_SetDigiDevice() (digitized effects, or their AdLib versions) and
- * SD_SetMusicMode(). */
-extern bool sd_effects_on, sd_digi_on, sd_music_on;
-void sd_set_effects(bool on);
+/* The Sound menu's three settings: SD_SetSoundMode() (the effects off, on
+ * the PC Speaker or on the AdLib), SD_SetDigiDevice() (digitized effects, or
+ * their PC Speaker or AdLib versions) and SD_SetMusicMode(). The effects'
+ * numbers are the ones the cartridge's settings keep, AdLib's 1 as when it
+ * was the only choice. */
+enum { SD_FX_OFF, SD_FX_ADLIB, SD_FX_PC };
+extern int  sd_effects;
+extern bool sd_digi_on, sd_music_on;
+void sd_set_effects(int mode);
 void sd_set_digi(bool on);
 void sd_set_music(bool on);
 void sd_pause_music(bool paused);           /* SD_MusicOff() / SD_MusicOn() */
@@ -760,15 +764,17 @@ void sd_init(void);
 bool sd_play_sound(int sound);              /* true if it went digitized  */
 void sd_play_sound_loc_tile(int sound, int tilex, int tiley);
 void sd_play_sound_loc_global(int sound, fixed gx, fixed gy);
-int  sd_sound_playing(void);                /* the AdLib sound, or 0      */
+int  sd_sound_playing(void);                /* the AdLib or PC sound, or 0 */
 void sd_update(int tics);                   /* timers and stereo position */
 void sd_level_start(int level);             /* stop sounds, start the song */
 
 /* What sound.c needs from the platform: three voices, as on a Sound
  * Blaster Pro - FM music, one FM effect at a time, one digitized sound at a
- * time. Volumes are the SB Pro mixer's 0..15 per side. The ROM implements
- * these in n64audio.c; tools/sim.c records them. */
+ * time - and the PC Speaker, which plays the effects instead of the FM
+ * voice when the Sound menu says. Volumes are the SB Pro mixer's 0..15 per
+ * side. The ROM implements these in n64audio.c; tools/sim.c records them. */
 void snd_backend_adlib(int sound);          /* -1 stops it */
+void snd_backend_pc(int sound);             /* -1 stops it */
 void snd_backend_digi(int digi, int lvol, int rvol);     /* -1 stops it */
 void snd_backend_digi_volume(int lvol, int rvol);
 void snd_backend_music(int song);           /* -1 stops it */
@@ -779,6 +785,7 @@ void snd_backend_music_pause(bool paused);  /* hold it where it is */
 extern int             wolf_num_sounds, wolf_num_digi, wolf_num_game_sounds;
 extern const uint32_t *wolf_sound_map;      /* the game's sound -> the data's */
 extern const uint32_t *wolf_sound_info;     /* (priority << 16) | AdLib tics */
+extern const uint32_t *wolf_pc_info;        /* (priority << 16) | PC Speaker tics */
 extern const uint32_t *wolf_sound_digi;     /* digitized index or ~0         */
 extern const uint32_t *wolf_digi_tics;
 extern const uint32_t *wolf_level_song;     /* NUM levels                    */
@@ -800,6 +807,7 @@ bool intermission_tallying(void);           /* false once it waits on ack */
  * DOS game's 160-row screens into the middle of the view. */
 void intermission_new_game(void);
 void psyched_start(void);
+void psyched_bar(int current, int total);
 void victory_start(void);
 
 /* Write(): the LEVELEND lump's big letters, at x, y in eight-pixel cells of

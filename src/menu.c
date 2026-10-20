@@ -56,9 +56,9 @@
 #define SM_X    48
 #define SM_W    250
 #define SM_Y1   20
-#define SM_H1   3 * 13 - 7                  /* two rows each; DOS had three */
+#define SM_H1   4 * 13 - 7                  /* three rows, as in DOS */
 #define SM_Y2   SM_Y1 + 5 * 13
-#define SM_H2   3 * 13 - 7
+#define SM_H2   3 * 13 - 7                  /* two rows each; DOS had three */
 #define SM_Y3   SM_Y2 + 5 * 13
 #define SM_H3   3 * 13 - 7
 
@@ -313,11 +313,14 @@ bool ctl_held(int action, unsigned pad)
 /* SndMenu[] offered each kind of sound on the PC's devices - PC Speaker or
  * AdLib/Sound Blaster effects, Disney Sound Source or Sound Blaster
  * digitized sound, AdLib/Sound Blaster music. The N64 has one sound system,
- * the RCP's audio (mixed on the RSP), so each is None or Nintendo 64 Audio.
- * The rows keep their DOS places under the three titles, one row shorter. */
+ * the RCP's audio (mixed on the RSP), so the digitized sound and the music
+ * are None or Nintendo 64 Audio, a row shorter than DOS's; the effects keep
+ * their two kinds, both synthesized - the PC Speaker's square waves
+ * (pcspeaker.c) and the AdLib's FM (adlib.c). The rows keep their DOS
+ * places under the three titles. */
 static item_t snd_menu[] = {
-    { 1, "None", false }, { 1, "Nintendo 64 Audio", false },
-    { 0, "", false }, { 0, "", false }, { 0, "", false },
+    { 1, "None", false }, { 1, "PC Speaker", false }, { 1, "AdLib", false },
+    { 0, "", false }, { 0, "", false },
     { 1, "None", false }, { 1, "Nintendo 64 Audio", false },
     { 0, "", false }, { 0, "", false }, { 0, "", false },
     { 1, "None", false }, { 1, "Nintendo 64 Audio", false },
@@ -896,8 +899,9 @@ static void draw_sound_menu(void)
         if (!snd_menu[i].string[0])
             continue;
         switch (i) {
-        case 0:  on = !sd_effects_on; break;
-        case 1:  on =  sd_effects_on; break;
+        case 0:  on = sd_effects == SD_FX_OFF;   break;
+        case 1:  on = sd_effects == SD_FX_PC;    break;
+        case 2:  on = sd_effects == SD_FX_ADLIB; break;
         case 5:  on = !sd_digi_on;    break;
         case 6:  on =  sd_digi_on;    break;
         case 10: on = !sd_music_on;   break;
@@ -1761,24 +1765,36 @@ static void select_item(int which)
         break;
 
     case SCR_SOUND: {
-        const bool was[3] = { sd_effects_on, sd_digi_on, sd_music_on };
+        const int  was_effects = sd_effects;
+        const bool was[2] = { sd_digi_on, sd_music_on };
         switch (which) {
         case -1:
             menu_fade_out(A_MAIN);
             return;
         case 0:
-            if (sd_effects_on) {
-                sd_set_effects(false);
+            if (sd_effects != SD_FX_OFF) {
+                sd_set_effects(SD_FX_OFF);
                 draw_sound_menu();
             }
             break;
         case 1:
-            if (!sd_effects_on) {
-                sd_set_effects(true);
+        case 2: {
+            const int mode = which == 1 ? SD_FX_PC : SD_FX_ADLIB;
+            if (sd_effects != mode) {
+                sd_set_effects(mode);
+                /* The PC Speaker brings the game as it sounded on a PC with
+                 * no sound card: no recordings and no music, which there was
+                 * nothing to play on. Not a DOS rule - there the settings were
+                 * independent - so either can be turned back on below. */
+                if (mode == SD_FX_PC) {
+                    sd_set_digi(false);
+                    sd_set_music(false);
+                }
                 draw_sound_menu();
                 sd_play_sound(SHOOTSND);
             }
             break;
+        }
         case 5:
             if (sd_digi_on) {
                 sd_set_digi(false);
@@ -1808,7 +1824,7 @@ static void select_item(int which)
             }
             break;
         }
-        if (was[0] != sd_effects_on || was[1] != sd_digi_on || was[2] != sd_music_on)
+        if (was_effects != sd_effects || was[0] != sd_digi_on || was[1] != sd_music_on)
             save_config();                  /* WriteConfig() */
         begin_handle();
         break;

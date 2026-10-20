@@ -7,7 +7,7 @@
 #
 #   docker run --rm -v "<project>:/src" -w /src n64-libdragon make
 #
-# build.ps1 builds it the first time it is needed; by hand:
+# build.sh builds it the first time it is needed; by hand:
 #   docker build -f tools/Dockerfile.libdragon -t n64-libdragon tools
 FROM ghcr.io/dragonminded/libdragon:latest
 

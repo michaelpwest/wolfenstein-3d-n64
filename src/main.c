@@ -6,12 +6,10 @@
  * viewbuf and statusbuf onto the screen with the fade applied.
  */
 #include <libdragon.h>
+#include <malloc.h>
 #include <stdio.h>
 #include "wolf.h"
 #include "n64prof.h"
-
-/* The blob, linked in by src/blob.S. */
-extern const uint8_t wolf3d_dat[];
 
 /* n64audio.c */
 void n64audio_init(void);
@@ -134,6 +132,28 @@ void platform_read_big(uint32_t offset, void *dst, uint32_t len)
             (unsigned long)len, (unsigned long)offset);
 }
 
+/* The blob, assets/wolf3d.dat, read whole from the ROM's filesystem into
+ * RAM at boot, where the game uses it in place. It is a file of its own
+ * rather than linked into the program so that the program is the same
+ * whatever game the data is from. */
+static const uint8_t *load_blob(void)
+{
+    FILE *f = fopen("rom:/wolf3d.dat", "rb");
+    uint8_t *blob;
+    long size;
+
+    assertf(f, "wolf3d.dat is missing from the ROM filesystem");
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    blob = memalign(16, (size_t)size);
+    assertf(blob, "no room for wolf3d.dat's %ld bytes", size);
+    assertf(fread(blob, 1, (size_t)size, f) == (size_t)size,
+            "cannot read wolf3d.dat");
+    fclose(f);
+    return blob;
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(void)
@@ -148,10 +168,10 @@ int main(void)
     joypad_init();
 
     assertf(dfs_init(DFS_DEFAULT_LOCATION) == DFS_ESUCCESS,
-            "no ROM filesystem - wolfbig.dat and the audio were not built in");
+            "no ROM filesystem - the game's data and audio were not built in");
     big_file = fopen("rom:/wolfbig.dat", "rb");
     assertf(big_file, "wolfbig.dat is missing from the ROM filesystem");
-    assertf(assets_init(wolf3d_dat),
+    assertf(assets_init(load_blob()),
             "assets/wolf3d.dat is missing or stale - run tools/extract_assets.py");
     build_tables();
     n64audio_init();                    /* before level_load starts a song */

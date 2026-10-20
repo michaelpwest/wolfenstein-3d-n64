@@ -1,0 +1,11 @@
+# Emscripten, with libdragon's source beside it, for the web builder: the
+# tools it runs in the browser (wasm_tools.sh) are libdragon's, compiled to
+# WebAssembly. libdragon comes from the n64-libdragon image
+# (tools/Dockerfile.libdragon), so the tools are the same as the ROM build's.
+# ./build.sh --web builds this the first time it is missing; by hand:
+#
+#   docker build -f tools/web/Dockerfile.emscripten -t n64-libdragon-web tools/web
+FROM n64-libdragon AS libdragon
+
+FROM emscripten/emsdk:6.0.12
+COPY --from=libdragon /libdragon /libdragon

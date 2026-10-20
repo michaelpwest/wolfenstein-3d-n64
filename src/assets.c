@@ -34,6 +34,7 @@ static const uint32_t *sprite_index;
 
 int             wolf_num_sounds, wolf_num_digi, wolf_num_game_sounds;
 const uint32_t *wolf_sound_info;
+const uint32_t *wolf_pc_info;
 const uint32_t *wolf_sound_digi;
 const uint32_t *wolf_digi_tics;
 const uint32_t *wolf_level_song;
@@ -113,11 +114,13 @@ bool assets_init(const uint8_t *blob)
      * recordings, floors, the game's sounds, the song roles - then the
      * per-sound info and digitized map, digitized lengths, the song for
      * each floor, the two stereo tables, the game's sound numbers in this
-     * data, and the songs by role - all 32-bit words. */
+     * data, the songs by role, and the PC Speaker sounds' info, as the
+     * AdLib ones' - all 32-bit words. */
     {
         const uint8_t *snd = blob + be32(blob + 36);
         const uint32_t *w  = (const uint32_t *)(snd + 32);
         int nsongs  = (int)be32(snd + 12);
+        int nroles  = (int)be32(snd + 20);
 
         wolf_num_sounds      = (int)be32(snd + 4);
         wolf_num_digi        = (int)be32(snd + 8);
@@ -128,9 +131,11 @@ bool assets_init(const uint8_t *blob)
         wolf_level_song  = w;  w += nsongs;
         wolf_pantable    = w;  w += 2 * 15 * 30;
         wolf_sound_map   = w;  w += wolf_num_game_sounds;
-        wolf_music_roles = w;
+        wolf_music_roles = w;  w += nroles;
+        wolf_pc_info     = w;
 
-        if (nsongs < wolf_num_levels || (int)be32(snd + 20) < MUSROLES)
+        if (nsongs < wolf_num_levels || nroles < MUSROLES
+            || (int)be32(snd + 24) != wolf_num_sounds)
             return false;
     }
 

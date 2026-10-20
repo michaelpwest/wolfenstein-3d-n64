@@ -5,13 +5,17 @@ Reads your copy of the game - the shareware episode (*.WL1), the full
 six-episode game (*.WL6) or Spear of Destiny (*.SOD), whichever is in the
 folder - and writes
 
-  assets/wolf3d.dat   a big-endian blob that the ROM links in with .incbin
-                      and uses in place: everything a floor needs
+  assets/wolf3d.dat   a big-endian blob that goes into the ROM's filesystem
+                      and is read into RAM at boot, where the game uses it
+                      in place: everything a floor needs
   assets/wolfbig.dat  what is only needed now and then - the maps and the
                       full-screen pictures - which goes into the ROM's
                       filesystem and is read when it is wanted, so that the
                       larger games still fit a 4 MB console's memory
   assets/audio/       the raw sounds and music
+
+(--out puts those three somewhere other than assets/: the web builder's
+own folder, as tools/web/app/build.mjs runs it in the browser.)
 
 Two pieces of artwork the game needs are not in the data files: they were
 linked into the DOS executable. They are read out of WOLF3D.EXE (or
@@ -75,6 +79,34 @@ def data_path(name):
 def fname(base):
     """A data file's path: VSWAP -> DATA/VSWAP.WL6, say."""
     return data_path("%s.%s" % (base, EXT))
+
+
+# The eight data files every game has, by their names before the extension
+DATA_FILES = ("VSWAP", "GAMEMAPS", "MAPHEAD", "VGAGRAPH", "VGADICT", "VGAHEAD",
+              "AUDIOT", "AUDIOHED")
+
+
+def names_list(names):
+    """A, B and C"""
+    return names[0] if len(names) == 1 else "%s and %s" % (", ".join(names[:-1]), names[-1])
+
+
+def damaged(path, why):
+    """Stops on a data file that is not what its own index says it is - cut
+    short in a copy, or damaged - rather than build a ROM from what is left."""
+    raise SystemExit("%s looks damaged or incomplete (%s): copy it from your game"
+                     " again." % (os.path.basename(path), why))
+
+
+def check_files():
+    """All eight data files there, before reading any - which says what is
+    missing, rather than stopping at the first."""
+    missing = ["%s.%s" % (b, EXT) for b in DATA_FILES if not os.path.exists(fname(b))]
+    if missing:
+        raise SystemExit("%s %s missing: the folder needs all of the game's files"
+                         " - its eight .%s files and its %s."
+                         % (names_list(missing), "is" if len(missing) == 1 else "are",
+                            EXT, "SPEAR.EXE" if EXT == "SOD" else "WOLF3D.EXE"))
 
 
 def have_source(*parts):
@@ -166,6 +198,8 @@ def load_maps():
     episodes of ten), Spear of Destiny's 21."""
     with open(fname("MAPHEAD"), "rb") as f:
         head = f.read()
+    if len(head) < 402:
+        damaged(fname("MAPHEAD"), "%d bytes, not 402" % len(head))
     rlew_tag = struct.unpack_from("<H", head, 0)[0]
     offsets = struct.unpack_from("<100i", head, 2)
 
@@ -181,8 +215,12 @@ def load_maps():
     levels = []
     for n in range(count):
         pos = offsets[n]
+        if pos + 38 > len(maps):
+            damaged(fname("GAMEMAPS"), "floor %d is past its end" % (n + 1))
         planestart = struct.unpack_from("<3i", maps, pos)
         planelength = struct.unpack_from("<3H", maps, pos + 12)
+        if any(s + l > len(maps) for s, l in zip(planestart, planelength)):
+            damaged(fname("GAMEMAPS"), "floor %d runs past its end" % (n + 1))
         width, height = struct.unpack_from("<2H", maps, pos + 18)
         name = maps[pos + 22:pos + 38].split(b"\0")[0].decode("latin-1")
         if (width, height) != (MAPSIZE, MAPSIZE):
@@ -209,9 +247,16 @@ def load_maps():
 def load_vswap():
     with open(fname("VSWAP"), "rb") as f:
         data = f.read()
+    if len(data) < 6:
+        damaged(fname("VSWAP"), "%d bytes" % len(data))
     chunks, sprite_start, sound_start = struct.unpack_from("<3H", data, 0)
+    if len(data) < 6 + chunks * 6:
+        damaged(fname("VSWAP"), "its index runs past its end")
     offsets = struct.unpack_from("<%dI" % chunks, data, 6)
     lengths = struct.unpack_from("<%dH" % chunks, data, 6 + chunks * 4)
+    end = max(off + ln for off, ln in zip(offsets, lengths) if off) if chunks else 0
+    if end > len(data):
+        damaged(fname("VSWAP"), "%d bytes, where its index says %d" % (len(data), end))
     print("  %d chunks, %d wall pages, sprites start at %d, sounds at %d"
           % (chunks, sprite_start, sprite_start, sound_start))
 
@@ -231,8 +276,9 @@ def load_vswap():
     names = VT["SPRITES"]
     numsprites = sound_start - sprite_start
     if numsprites != len(names):
-        raise SystemExit("VSWAP has %d sprites, WL_DEF.H's list for this"
-                         " version %d" % (numsprites, len(names)))
+        raise SystemExit("%s is from a version of the game this does not know: it"
+                         " has %d sprites, where the versions it knows have %d."
+                         % (os.path.basename(fname("VSWAP")), numsprites, len(names)))
     sprites = []
     for s in range(numsprites):
         data_s = chunk(sprite_start + s)
@@ -666,11 +712,19 @@ def typing_footer(pic, shades):
 
 def load_vgagraph():
     with open(fname("VGADICT"), "rb") as f:
-        nodes = struct.unpack("<512H", f.read()[:1024])
+        dictionary = f.read()
+    if len(dictionary) < 1024:
+        damaged(fname("VGADICT"), "%d bytes, not 1024" % len(dictionary))
+    nodes = struct.unpack("<512H", dictionary[:1024])
     with open(fname("VGAHEAD"), "rb") as f:
         head = f.read()
     with open(fname("VGAGRAPH"), "rb") as f:
         gfx = f.read()
+    # VGAHEAD's last entry is where VGAGRAPH ends
+    if len(head) >= 3:
+        end = head[-3] | (head[-2] << 8) | (head[-1] << 16)
+        if end != 0xFFFFFF and end > len(gfx):
+            damaged(fname("VGAGRAPH"), "%d bytes, where VGAHEAD says %d" % (len(gfx), end))
 
     def pos(c):
         if (c + 1) * 3 > len(head):
@@ -998,7 +1052,8 @@ def pack_pics(pics, big, palettes):
 
 import re
 
-AUDIO_DIR = os.path.join(PROJECT, "assets", "audio")
+ASSETS = os.path.join(PROJECT, "assets")        # --out
+AUDIO_DIR = os.path.join(ASSETS, "audio")
 DIGI_RATE = 7042            # ID_SD.C: SB time constant 256 - 1000000/7000
 
 
@@ -1237,9 +1292,12 @@ def load_audio(vswap, num_levels):
         audiot = f.read()
     offs = struct.unpack("<%dI" % (len(hed) // 4), hed)
     if len(offs) - 1 != STARTMUSIC + len(music):
-        raise SystemExit("%s has %d chunks, the audio header implies %d"
-                         % (fname("AUDIOHED"), len(offs) - 1,
-                            STARTMUSIC + len(music)))
+        raise SystemExit("%s is from a version of the game this does not know: it"
+                         " lists %d sounds and songs, where the versions it knows"
+                         " have %d." % (os.path.basename(fname("AUDIOHED")),
+                                       len(offs) - 1, STARTMUSIC + len(music)))
+    if offs[-1] > len(audiot):
+        damaged(fname("AUDIOT"), "%d bytes, where AUDIOHED says %d" % (len(audiot), offs[-1]))
 
     def chunk(c):
         return audiot[offs[c]:offs[c + 1]]
@@ -1263,6 +1321,17 @@ def load_audio(vswap, num_levels):
         length, priority = struct.unpack_from("<IH", data, 0)
         audio_file("al%02d.adl" % s, data)
         info.append((priority, (length + 1) // 2))   # 140 Hz bytes -> 70 Hz tics
+
+    # PC Speaker sound effects, the first numsounds chunks (STARTPCSOUNDS):
+    # SoundCommon (length, priority), then one byte per 140 Hz tick - the
+    # timer's divisor over 60, or 0 for the speaker off. Written as-is, for
+    # src/pcspeaker.c; their priorities and lengths are their own.
+    pcinfo = []
+    for s in range(numsounds):
+        data = chunk(s)
+        length, priority = struct.unpack_from("<IH", data, 0) if len(data) >= 6 else (0, 0)
+        audio_file("pc%02d.pcs" % s, data)
+        pcinfo.append((priority, (min(length, len(data) - 6) + 1) // 2 if length else 0))
 
     # Music: a word of length in bytes, then (register, value, delay) at 700 Hz.
     songs = [music[n] for n in VT["SONGS"][:num_levels]]
@@ -1316,14 +1385,14 @@ def load_audio(vswap, num_levels):
           % (numsounds, sum(d != 0xFFFFFFFF for d in digimap),
              sum(1 for t in digi if t), len(digi), songs))
     return (info, digimap, digi, songs,
-            [TABLES["LEFTTABLE"], TABLES["RIGHTTABLE"]], soundmap, roles)
+            [TABLES["LEFTTABLE"], TABLES["RIGHTTABLE"]], soundmap, roles, pcinfo)
 
 
-def pack_sounds(info, digimap, digi, songs, pantables, soundmap, roles):
+def pack_sounds(info, digimap, digi, songs, pantables, soundmap, roles, pcinfo):
     """All 32-bit words, so tools/sim swaps the whole section in one pass;
     the first word is how many there are."""
     words = [0, len(info), len(digi), len(songs), len(soundmap), len(roles),
-             0, 0]
+             len(pcinfo), 0]
     words += [(p << 16) | t for p, t in info]
     words += digimap
     words += digi
@@ -1331,6 +1400,7 @@ def pack_sounds(info, digimap, digi, songs, pantables, soundmap, roles):
     words += pantables[0] + pantables[1]
     words += soundmap
     words += roles
+    words += [(p << 16) | t for p, t in pcinfo]     # the PC Speaker's, as info
     words[0] = len(words)
     return struct.pack(">%dI" % len(words), *words)
 
@@ -1370,13 +1440,15 @@ def load_palette():
         if found:
             return found
     if not have_source("OBJ", "GAMEPAL.OBJ"):
-        raise SystemExit("no palette: it is not in the data files but inside"
-                         " the game's executable, which is %s; put the"
-                         " game's WOLF3D.EXE (or SPEAR.EXE) in %s (id's"
-                         " source release can stand in for it: see"
-                         " docs/TECHNICAL_DETAILS.md)"
-                         % ("missing" if not image else "not a version this"
-                            " knows", DATA))
+        # (--source's GAMEPAL.OBJ could stand in, but that is for working on
+        # the port: see docs/TECHNICAL_DETAILS.md)
+        exe = "SPEAR.EXE" if EXT == "SOD" else "WOLF3D.EXE"
+        if not image:
+            raise SystemExit("%s is missing: the game's colors are inside it, not in"
+                             " the data files, so it has to be in the folder with"
+                             " them." % exe)
+        raise SystemExit("%s is not a version this knows: it should be the one that"
+                         " came with these data files." % exe)
     path = os.path.join(WOLFSRC, "OBJ", "GAMEPAL.OBJ")
     with open(path, "rb") as f:
         found = find_palette(f.read(), "GAMEPAL.OBJ")
@@ -1464,18 +1536,35 @@ def sprites_header(names):
 
 
 def main():
+    """extract(), with what goes wrong reading the game's files said plainly:
+    a file the checks above let through but that is still not what this
+    expects - damaged in a way they do not see, or another version - stops
+    with a message rather than a Python traceback."""
+    try:
+        return extract()
+    except (struct.error, IndexError, ValueError, KeyError, UnicodeDecodeError) as e:
+        raise SystemExit("the game's files look damaged, or are from a version of the"
+                         " game this does not know (%s: %s): copy them from your"
+                         " game again." % (type(e).__name__, e))
+
+
+def extract():
     global DATA, WOLFSRC, TABLES, EXT, VT, GAME_SPRITES, GAME_SOUNDS
+    global ASSETS, AUDIO_DIR
     args = sys.argv[1:]
     write = "--write-tables" in args
-    for flag in ("--data", "--source"):
+    for flag in ("--data", "--source", "--out"):
         if flag in args:
             i = args.index(flag)
             if i + 1 >= len(args):
                 raise SystemExit("%s needs a folder" % flag)
             if flag == "--data":
                 DATA = os.path.abspath(args[i + 1])
-            else:
+            elif flag == "--source":
                 WOLFSRC = os.path.abspath(args[i + 1])
+            else:                       # the builder's: somewhere of its own
+                ASSETS = os.path.abspath(args[i + 1])
+                AUDIO_DIR = os.path.join(ASSETS, "audio")
     if write:
         if not have_source("AUDIOWL6.H"):
             raise SystemExit("--write-tables needs --source: the WOLFSRC folder"
@@ -1488,6 +1577,7 @@ def main():
         return 0
 
     EXT = detect_version()
+    check_files()
     print("%s: %s" % (DATA, {"WL1": "the shareware episode",
                              "WL6": "the full game, six episodes",
                              "SOD": "Spear of Destiny"}[EXT]))
@@ -1585,9 +1675,9 @@ def main():
     assert len(header) == HEADER, len(header)
 
     print("")
-    for out, data in ((os.path.join(PROJECT, "assets", "wolf3d.dat"),
+    for out, data in ((os.path.join(ASSETS, "wolf3d.dat"),
                        header + bytes(body)),
-                      (os.path.join(PROJECT, "assets", "wolfbig.dat"), big)):
+                      (os.path.join(ASSETS, "wolfbig.dat"), big)):
         changed = write_file(out, data)
         print("%s %s (%d bytes)" % ("wrote" if changed else "unchanged:",
                                     out, len(data)))

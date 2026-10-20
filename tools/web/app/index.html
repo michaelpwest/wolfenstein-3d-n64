@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wolfenstein 3D for Nintendo 64 - ROM Builder</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <!-- title.svg is build.sh's terminal title, drawn by its title_svg -->
+    <h1><img class="title" src="title.svg" alt="Wolfenstein 3D" width="70" height="12">
+    <span class="subtitle">for Nintendo 64</span></h1>
+    <p class="version">ROM Builder v{{VERSION}}</p>
+  </header>
+
+  <p class="intro">Builds the Nintendo 64 ROM from your own copy of Wolfenstein 3D:
+  the shareware episode, the full game or Spear of Destiny. It all happens in this
+  browser - your files are not uploaded anywhere.</p>
+
+  <section id="pick" class="drop" tabindex="0">
+    <p class="drop-title">Choose your game folder</p>
+    <p class="drop-hint">The folder with <code>VSWAP</code>, <code>GAMEMAPS</code>,
+    <code>MAPHEAD</code>, <code>VGAGRAPH</code>, <code>VGADICT</code>, <code>VGAHEAD</code>,
+    <code>AUDIOT</code>, <code>AUDIOHED</code> and <code>WOLF3D.EXE</code> or
+    <code>SPEAR.EXE</code> - or drop it here.</p>
+    <label class="button" for="folder">Choose folder&hellip;</label>
+    <input id="folder" type="file" webkitdirectory multiple hidden>
+    <p id="found" class="found" aria-live="polite"></p>
+  </section>
+
+  <section class="options">
+    <label for="romname">ROM name</label>
+    <input id="romname" type="text" placeholder="Wolfenstein 3D.z64" spellcheck="false" autocomplete="off">
+    <p class="note">Optional. Saves and high scores go with the ROM's name, so give two
+    copies of a game different names to keep theirs apart.</p>
+  </section>
+
+  <section class="actions">
+    <button id="build" class="button primary" disabled>Build ROM</button>
+    <a id="download" class="button" hidden>Download</a>
+  </section>
+
+  <div id="progress" class="progress" hidden>
+    <div class="track"><div id="bar"></div></div>
+    <span id="percent" class="percent">0%</span>
+  </div>
+  <p id="status" class="status" aria-live="polite"></p>
+
+  <details id="details">
+    <summary>Build log</summary>
+    <pre id="log"></pre>
+  </details>
+
+  <footer>
+    <p>The ROM holds id Software's game data from your files: it is for you to play,
+    not to share. Run it in <a href="https://ares-emu.net/" target="_blank" rel="noopener">ares</a>
+    or on a Nintendo 64 with a flash cart that supports SRAM saves.</p>
+    <p>The port is GPL software:
+    <a href="https://github.com/michaelpwest/wolfenstein-3d-n64" target="_blank" rel="noopener">source on GitHub</a> &middot;
+    <a href="THIRD_PARTY_NOTICES.txt" target="_blank">licenses</a></p>
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

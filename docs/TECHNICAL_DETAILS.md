@@ -9,17 +9,19 @@ to build and run it, see [README.md](../README.md).
 ### ROM names
 
 The ROM is named after the game in full, as most ROMs are: `Wolfenstein
-3D.z64` for the shareware and the full game (3.0 MB and 6.0 MB), `Spear of
-Destiny.z64` for Spear of Destiny (6.4 MB), unless `-Name` asks for another.
+3D.z64` for the shareware and the full game (3.7 MB and 6.7 MB), `Spear of
+Destiny.z64` for Spear of Destiny (7.1 MB), unless `--name` asks for another.
 
 make cannot build a file whose name has a space in it, so it builds the ROM
 inside `build\` under a plain name - `build\wolf3d.z64` or `build\spear.z64`,
 by the game extracted - and the script copies it out under the full name or
-`-Name`'s. (Its ELF is `build\build\wolf3d.elf`, where libdragon's rule for
+`--name`'s. (Its ELF is `build\build\wolf3d.elf`, where libdragon's rule for
 a ROM at `build/wolf3d.z64` expects it.) The plain name stays per game
-rather than following `-Name` because the ROM records its program's file
+rather than following `--name` because the ROM records its program's file
 name, `wolf3d.elf.stripped`, in its table of contents: this way a ROM is the
-same byte for byte whatever it is called.
+same byte for byte whatever it is called. That is `--compile`; the
+prebuilt build (`build.mjs`) gives the program the same name for each
+game, so its ROMs are named apart the same way.
 
 The two games are named apart because a cartridge is given its SRAM by the name
 of the ROM - emulators and flash carts keep the saves in a file beside it -
@@ -40,11 +42,32 @@ coming back to it from the other game, does not pay for work whose answer
 has not changed. Files that belong to a game no longer extracted are swept
 out of `assets\audio\`, so the folder holds one game's and no leftovers.
 
-Naming a folder with `-Data` always extracts from it again; without it,
-`-Rom` uses whatever was extracted last, and `-Assets` extracts again from
-`gamedata\`. `-Clean` runs `make clean`, which removes `build\` and the ROMs
-but not `assets\`, so it does not extract again unless `-Assets` or `-Data`
-is given as well.
+With `--compile`, naming a folder with `--data` always extracts from it
+again; without it, `--compile` uses whatever was extracted last, and
+`--assets` extracts again from `gamedata\`. `--clean` runs `make clean`,
+which removes `build\` and the ROMs but not `assets\`, so it does not
+extract again unless `--assets` or `--data` is given as well. `--rom` and
+the menu extract nothing into `assets\`: the prebuilt build reads the game
+folder itself every time (see Building from the prebuilt program).
+
+### When the game's files are not right
+
+Every way of building checks the folder before it starts, with the same
+words: `check_folder` in `build.sh`, and `checkGame` in `build.mjs` for the
+web page, which says so as soon as a folder is chosen and leaves **Build
+ROM** off. They name what is missing - AUDIOT.WL1 and WOLF3D.EXE, say, in
+"Found the shareware episode, but AUDIOT.WL1 and WOLF3D.EXE are missing" -
+and catch a zip chosen instead of its folder,
+the folder around the game's instead of the game's own (pointing at the
+subfolder that has it), and two games in one folder.
+
+The extractor itself (`check_files`, `damaged`) checks each file against
+its own index - VSWAP's chunk table, MAPHEAD's floor offsets, VGAHEAD's and
+AUDIOHED's ends - so a file cut short in copying stops the build, naming
+the file, rather than making a ROM from what is left of it; a truncated
+VSWAP once made a ROM 400 KB short that way. Anything else that goes wrong
+reading a file is said plainly too, as damage or an unknown version,
+rather than as a Python traceback.
 
 ### The palette and the sign-on screen
 
@@ -56,7 +79,7 @@ both inside - the palette by its sixteen EGA colors, the sign-on screen by a
 hash of some of its rows, so no pixels of it are kept here.
 
 - **The palette is required.** Without the executable (or with a version
-  where it is not found), id's source release can stand in: `-Source`
+  where it is not found), id's source release can stand in: `--source`
   pointing at the `WOLFSRC` folder of
   [id-Software/wolf3d](https://github.com/id-Software/wolf3d) takes it from
   `OBJ\GAMEPAL.OBJ` instead. (That is Wolfenstein's; Spear of Destiny's
@@ -70,24 +93,24 @@ hash of some of its rows, so no pixels of it are kept here.
 The tables id's source would supply (sound and song numbers, the digitized
 sound map, each floor's song, the sprite and pic lists, the stereo tables -
 Wolfenstein's and Spear of Destiny's) are carried in `tools\wolf_tables.py`;
-given `-Source`, every asset build parses the source again and checks they
+given `--source`, every asset build parses the source again and checks they
 agree. `src\sprites.h`, the game's sprite numbers, is generated from the same
 tables (`--write-tables` rewrites both), and every extraction checks it still
 matches.
 
-`-Source` (`--source` for `build.sh` and the extractor) is a maintainer's
-option, and is left out of the help screens, the README and the build window
-on purpose: a build needs only the game's files and its executable. It
-still works: `.\build.ps1 -Assets -Source
-D:\WOLFSRC` extracts again with the tables checked against the source, and
-with the source's `OBJ\GAMEPAL.OBJ` standing in for a missing palette.
+`--source` (for `build.sh` and the extractor) is a maintainer's option, and
+is left out of `--help`, the menu and the README on purpose: a build needs
+only the game's files and its executable. It still works:
+`./build.sh --assets --source /d/WOLFSRC` extracts again with the tables
+checked against the source, and with the source's `OBJ\GAMEPAL.OBJ`
+standing in for a missing palette.
 
 ### The toolchain
 
 The toolchain is libdragon, in a Docker image called `n64-libdragon`:
 `tools\Dockerfile.libdragon` adds the library and its tools to the official
 toolchain image, at the libdragon ref its `LIBDRAGON_REF` argument names
-(`trunk` by default). `build.ps1` builds it the first time it is not there
+(`trunk` by default). `build.sh` builds it the first time it is not there
 (it compiles libdragon, so that first build takes several minutes); to
 build it by hand:
 
@@ -97,14 +120,31 @@ The ROM's name is passed to `make` as `ROM=`. The header's title is not
 passed at all: the Makefile reads the blob's version word (byte 10 of
 `assets\wolf3d.dat`) itself and sets `N64_ROM_TITLE`, so the title cannot
 disagree with the data - and no script has to hand `make` a quoted title
-with a space in it, which Windows PowerShell 5.1 cannot pass intact (see
-below). The scripts take the default name from the same word.
+with a space in it. `build.sh` takes the default name from the same word.
 
-### build.sh, for macOS, Linux and Git Bash
+### build.sh, on Windows, macOS and Linux
 
-`build.sh` does what `build.ps1` does, option for option (`--rom`,
-`--data`, `--name` and so on), with a few differences that matter off
-Windows - and one that matters on it:
+`build.sh` is the one build script, run in the Terminal on macOS and Linux
+and in Git Bash on Windows, or double-clicked there. It has two halves:
+
+- **Building the game**, which needs only Node.js: `--rom` and `--serve`,
+  from the prebuilt program (see Building from the prebuilt program).
+- **Building from the source code**, which needs Docker and Python:
+  `--compile`, `--assets`, `--clean`, `--sim`, `--bench`, `--music-wav`,
+  `--sfx-wav`, `--web` and `--source`.
+
+With no options it shows a banner and a menu that walks through either.
+Its first two choices build from the prebuilt program and check only for
+Node.js, so no one who just wants the game is told they need Docker; the
+third checks for Python and Docker before anything else, says what to do
+about whichever is missing, and checks again on request, so Docker Desktop
+can be started while it waits. Then it asks what to build from the source:
+the ROM, the ROM with rendered audio, the benchmark ROM, the web builder,
+or the checks. Each step asks for no more than it
+needs - the game folder (a Windows path is turned into Git Bash's with
+`cygpath -u`), the ROM's name, the port - confirms, and can go back.
+
+A few things it does to work on all three systems:
 
 - It runs the container with `--user` set to you, so that on Linux what the
   build writes into the project - `build/` and the ROM - is yours and not
@@ -118,102 +158,48 @@ Windows - and one that matters on it:
   `C:/Program Files/Git/src`. So for Docker alone, `build.sh` and
   `tools/sim.sh` switch that off (`MSYS_NO_PATHCONV`, and MSYS2's
   `MSYS2_ARG_CONV_EXCL`) and give it the project folder as a Windows path
-  from `cygpath -m`. Python, a Windows program too, still gets the
-  rewriting, which it needs to open the files. There is no Unix owner to
-  get right on Windows, so `--user` is left off there, as `build.ps1` does.
+  from `cygpath -m`. Node and Python, Windows programs too, still get the
+  rewriting, which they need to open the files. There is no Unix owner to
+  get right on Windows, so `--user` is left off there.
 - It is written for bash 3.2, the version macOS ships, so it avoids
   associative arrays, `${var,,}`, `mapfile` and `set -u`, which trips over
-  an empty array in that version. It has been run under bash 3.2 and, in
-  full, on Ubuntu and in Git Bash, where its ROMs are byte for byte
-  `build.ps1`'s.
+  an empty array in that version. It has been run on macOS, on Ubuntu and
+  in Git Bash.
+- `--serve` serves the web builder's folder to this computer only, with a
+  small Node server (`tools/web/web_tools.mjs serve`) that gives `.wasm`,
+  `.mjs` and `.svg` the types browsers insist on. It runs in the
+  foreground, opens the page itself once it is listening - with `start`,
+  `open` or `xdg-open`, whichever the system has - and stops on Ctrl+C or
+  when its terminal window closes, which in Git Bash it sees as its input
+  pipe closing.
+- Double-clicked on Windows, it is the Git Bash window's own shell
+  (`SHLVL` 1) and is handed its path as `C:\...\build.sh`, which it turns
+  into Git Bash's with `cygpath -u` to find its folder; it ends with "Press
+  Enter to close this window", so that what it did can be read before the
+  window goes.
 
 libdragon's table of contents near the start of the ROM (`TOC0`) records
 the program's file name - `wolf3d.elf.stripped`, say. That name is make's
 own, which follows the game and not `--name` (see ROM names), so builds of
 the same game compare byte for byte whatever they are called.
 
-Both scripts, and the extractor, find the game's files whatever the case of
+The script, and the extractor, find the game's files whatever the case of
 their names: DOS named them in capitals, but not every copy keeps them that
 way, and Linux tells `VSWAP.WL1` from `vswap.wl1`. `.gitattributes` keeps
 the shell scripts' line endings Unix ones, which bash needs, even in a
 checkout on Windows.
 
-### The build window
-
-`build-gui.ps1` - opened by `build-gui.cmd` in Windows PowerShell, with no
-console left behind - is a Windows Forms window over `build.ps1`, not a
-second build. It runs `build.ps1` with the options chosen, under the same
-PowerShell as the window, and shows its output.
-
-- **One check.** Its lights and `build.ps1`'s help screen both come from
-  `Get-BuildRequirements` in `tools\requirements.ps1`, which gives each
-  requirement a state (ok, missing, later - needed, but made by the first
-  build - or unknown), whether a build needs it now, a line for the help
-  screen and a shorter one for the window. Asking Docker can take seconds,
-  so the window runs the check in a runspace of its own and collects it on
-  a timer. It checks again when a folder or the name changes, when the
-  window is activated, after a build, and every five seconds while Docker is
-  not running.
-- **The output.** The build is a child process whose output a small C#
-  class (`Wolf3dBuildGui.Runner`) queues a line at a time; the window's
-  timer empties the queue into the output box. A PowerShell script block
-  cannot run on the threads .NET reads a process's output on, so the queue
-  is what crosses between them.
-- **Stop** ends the build's process tree (`taskkill /T`) and then its
-  container, which would otherwise carry on compiling into `build\`.
-  `build.ps1` and `tools\sim.ps1` label their containers with the project
-  folder (`wolf3d-n64.project=`), so Stop ends this project's and no other's.
-- **Remembered choices** go to `build-gui.json` beside it, written as UTF-8
-  so that either PowerShell reads the other's. It holds your own folders, so
-  `.gitignore` keeps it out. A game folder that is the project's own
-  `gamedata` is not passed as `-Data`, which would extract it again on
-  every build.
-- **Which game is extracted.** The game-data line reads the blob's version
-  (the first 12 bytes of `assets\wolf3d.dat` are enough) and names the
-  game. When the chosen folder holds another one, `build.ps1` without
-  `-Assets` or `-Data` would build the game already extracted - the
-  gamedata folder is not passed as `-Data` - so the window adds `-Assets`
-  itself and says so in the output, and the line reads "switching to" it.
-  `build.ps1`'s help screen names the same case and points at `-Assets`.
-- **Scaling.** The window is laid out at 96 dots per inch and scaled to the
-  screen's by hand. Windows Forms' own scaling, on a screen at 200%, both
-  scaled the output box and stretched it with the window it is anchored to,
-  leaving its bottom half below the window.
-- It needs a single-threaded apartment for its dialogs. Windows PowerShell
-  and PowerShell 7 both give it one; anything that does not is handed to
-  Windows PowerShell.
-
-It was tested by driving the real window from outside - UI Automation to
-find it, Windows messages to click and type - through a ready state, a
-folder without the game, Docker unreachable, a build, a clean build
-stopped part way (the container gone with it), a full rebuild whose ROM
-matched the reference, the checks with all four demos in sync, remembered
-choices across a restart, and opening it from PowerShell 7.
-
-### Windows PowerShell 5.1
-
-The scripts run under Windows PowerShell 5.1, which every Windows has, as
-well as PowerShell 7. Two things in 5.1 needed care:
-
-- **Native programs' stderr.** With `$ErrorActionPreference = "Stop"`, 5.1
-  ends the script when a native program writes to stderr while it is
-  redirected. Docker does that when an image is missing and when it is not
-  running - exactly when `build.ps1` should explain rather than stop - and
-  all through building its image. Docker and Python therefore run through
-  `Invoke-Native` (`tools\requirements.ps1`), which switches that off for
-  the call; the exit code says how it went.
-- **Quoted arguments.** 5.1 cannot pass a native program an argument that
-  holds both quotes and a space intact, so `N64_ROM_TITLE="Wolfenstein 3D"`
-  reached the ROM tool in pieces and linking a ROM failed. The Makefile now
-  reads the title from the blob (see The toolchain), and the scripts pass
-  only `ROM=`.
-
 ### Audio build options
 
 The music is sequenced and the AdLib effects synthesized by default (see
-"Sound and music"). Inside the container, `make MUSIC=wav` and `make SFX=wav`
-bring back the older rendered versions - music exact but about 6 MB more,
-effects about 5 MB more. To check the effects synthesizer against Nuked-OPL3:
+"Sound and music"). `make MUSIC=wav` and `make SFX=wav` - `./build.sh
+--music-wav` and `--sfx-wav`, or the menu's "ROM with rendered audio" - bring
+back the older rendered versions: music exact but about 6 MB more, effects
+about 5 MB more. `build.sh` names such a ROM apart (`... (rendered
+music).z64` and so on) so it never replaces the usual one or shares its
+saves. A stamp in `build\` rebuilds `n64audio.c` and the audio whenever the
+switches change, so going back to the usual ROM needs no clean build. To
+check the effects synthesizer against Nuked-OPL3:
 
     gcc -O2 -o build/adlib_check tools/audio/adlib_check.c src/adlib.c tools/audio/nuked-opl3/opl3.c
     ./build/adlib_check assets/audio
@@ -339,7 +325,6 @@ button.
     tools\Dockerfile.libdragon the n64-libdragon toolchain image
     src\wolf.h                 the game's shared declarations
     src\sprites.h              the sprite numbers (generated; see above)
-    src\blob.S                 .incbin of that blob
     src\assets.c               header parsing, and reading wolfbig.dat
     src\level.c                SetupGameLevel + ScanInfoPlane
     src\doors.c                the DOORS section of WL_ACT1.C
@@ -357,25 +342,35 @@ button.
     src\sound.c                SD_PlaySound and its rules
     src\save.c                 SaveTheGame / LoadTheGame and the ten slots
     src\adlib.c, adlib.h       the OPL2 channel the AdLib effects play on
+    src\pcspeaker.c, .h        the PC Speaker, for its effects
     src\n64audio.c             libdragon mixer playback of the audio
     src\n64save.c              cartridge SRAM
     src\n64prof.c, n64prof.h   the profiler overlay and the benchmark ROM
     src\main.c                 display, reading the controller, frame loop
-    build.ps1, build.sh        the build, on Windows / on macOS and Linux
-    build-gui.ps1, .cmd        the build window, on Windows
-    tools\requirements.ps1     what a build needs, for build.ps1 and the window
+    build.sh                   the build, with its menu (Git Bash on Windows)
     tools\sim.c                the host build of the game's checks
                                (a third argument, readme, takes
                                candidates for the README's floor 1
                                screenshots instead)
-    tools\sim.ps1, sim.sh      build and run them (Windows / macOS, Linux)
-    tools\sim_run.sh           ...inside the container, for both
+    tools\sim.sh               build and run them (build.sh --sim)
+    tools\sim_run.sh           ...inside the container
     tools\sheet.py             the sim's contact sheet
     tools\audio\imf2xm.c       AdLib music -> XM modules, at build time
     tools\audio\render_audio.c AdLib music and effects -> WAV (kept only for
                                MUSIC=wav / SFX=wav)
     tools\audio\adlib_check.c  src\adlib.c against Nuked-OPL3
     tools\audio\nuked-opl3\    Nuked-OPL3, the OPL emulator (LGPL)
+    tools\web\app\             the web builder's page: index.html, app.js,
+                               worker.mjs, and build.mjs, the build itself
+                               (made by build.sh --web)
+    tools\web\wasm_tools.sh    the tools it runs, compiled to WebAssembly
+    tools\web\Dockerfile.emscripten
+                               Emscripten with libdragon's source, for those
+    tools\web\notices.sh       license texts for its THIRD_PARTY_NOTICES.txt
+    tools\web\build_node.mjs   its build run in Node: build.sh --rom, and
+                               the check of its ROMs
+    tools\web\web_tools.mjs    fetching the release's web builder, and
+                               serving it, for build.sh
 
 `extract_assets.py` reads the container formats the DOS game used:
 `GAMEMAPS` (Carmack-compressed, then RLEW-compressed, per `ID_CA.C`),
@@ -387,10 +382,11 @@ big-endian files:
 
 - **`wolf3d.dat`**, 1.0 MB for the shareware and 1.3-1.4 MB for the others,
   which the game uses in place - it never parses it into other structures.
-  It is linked into the program, and libdragon compresses the program in
-  the ROM and unpacks it into RAM at boot, so it costs its full size in RAM:
-  the walls, the sprites, the pics the menus and screens draw, the sound
-  tables, the fonts, the articles and the demos.
+  It is a file in the ROM's filesystem, read whole into RAM at boot, so it
+  costs its full size in RAM: the walls, the sprites, the pics the menus and
+  screens draw, the sound tables, the fonts, the articles and the demos. It
+  is not linked into the program, so the compiled program is the same
+  whichever game the data comes from - only the filesystem differs.
 - **`wolfbig.dat`**, 0.4 MB for the shareware and about 1.2 MB for the
   others: what is only needed now and then, kept in the ROM's filesystem and
   read when it is - each floor's two map planes, 16 KB a floor, read as the
@@ -399,8 +395,8 @@ big-endian files:
   buffers as a screen shows them. With 60 floors and more artwork, the full
   game and Spear of Destiny would not fit the console's 4 MB otherwise.
 
-The rest of the ROM is the audio filesystem: 1.8 MB for the shareware, about
-4 MB for the others, which have more songs.
+The rest of the ROM's filesystem is the audio: 1.8 MB for the shareware,
+about 4 MB for the others, which have more songs.
 
 The three games number their sprites, sounds and songs differently. The
 blob uses one numbering for all of them - Wolfenstein's sprite and sound
@@ -409,6 +405,94 @@ by name - and the game plays songs by what they are for (the title, the
 menus, the stats screen...) rather than by number. Whatever a version does
 not have is simply empty: the shareware's missing sprites, Spear of
 Destiny's absent "Read This!".
+
+### The web builder
+
+The compiled program doesn't depend on the game it is built for: the blob
+is a file in the ROM's filesystem, read into RAM at boot, not linked in.
+`make program` builds just the program, compressed, and its symbols, and
+needs no game files; built that way, or under Spear of Destiny's name, it
+is byte for byte the program in a normal ROM build. So the web builder
+carries it already made, and does only what follows compiling in the
+Makefile: the extractor, `imf2xm` on the songs, libdragon's `audioconv64`
+(songs to xm64, digitized sounds to wav64), `mkdfs`, `n64tool` to join
+program, symbols and filesystem, and `ed64romconfig` for the SRAM save
+type. Only the default audio is supported (XM music, synthesized effects),
+so `render_audio` isn't carried: nothing it makes is in that ROM.
+
+All of it runs in the browser: the player's game folder is read with the
+browser's file API and nothing is uploaded, so a static host - itch.io's
+HTML5 projects - is all it needs.
+`build.mjs` is the build: the extractor runs unchanged in Pyodide (Python
+compiled to WebAssembly, its core only, about 13 MB), and `imf2xm`,
+`audioconv64`, `mkdfs`, `n64tool` and `ed64romconfig` are compiled with
+Emscripten. Each tool runs in a fresh instance with a file system in
+memory: its input files are put in, its `main` is called with the
+Makefile's arguments, and what it wrote is read out for the next. It runs
+in a worker (`worker.mjs`), so the page stays responsive.
+
+Where the Makefile hands `imf2xm` and `audioconv64` a whole folder,
+`build.mjs` runs them once for each song and each digitized sound - which
+is what the tools do inside anyway, so the ROM is byte for byte the same -
+so that it can report how far each step is: "Converting the music… 6 of 11
+songs". It counts songs rather than giving each step a percentage, which
+would jump 9% at a time and stand still between. Each tool's WebAssembly is
+compiled once and instantiated afresh for every run. The page's bar, with
+its percentage, is for the whole build, weighing the steps by the time they
+take - converting the music is about 90% of it. `build_node.mjs
+--progress`, which `./build.sh --rom` passes when its output is a terminal,
+shows each step on a line that keeps updating, with a bar of its own:
+
+    24.1s  Converting the music      [███████████░░░░░░░░░]  6 of 11 songs
+
+Converting a song or a sound depends on nothing but its file and the
+converters' code, so each result is kept under a SHA-256 of the
+converters' WebAssembly, the file's name and its bytes, and a later build
+with the same song reuses it (`kept` in `build.mjs`). It is kept in memory
+while the page is open, and also stored: in the browser's IndexedDB
+(`worker.mjs`), so that it survives a reload, or for `./build.sh --rom` in
+`build/web-cache` (`build_node.mjs`). Either store is emptied when the
+converters change, so a new builder never reuses an old one's results, and
+any failure to store is ignored - the build just converts again. Building
+the same game again takes about 2 seconds instead of 35-80; the full game
+after the shareware reuses the shareware's 31 songs and sounds, which are
+identical, and takes 41 seconds instead of 75; Spear of Destiny shares 16
+with them. Every one of those ROMs is byte for byte the uncached build's.
+All three games' conversions take 6.2 MB.
+
+WebAssembly is a 32-bit machine, which `audioconv64` notices: it works out
+the memory each song's context needs on the N64 from its own structures'
+sizes, and those come out smaller than a 64-bit PC's - 8 bytes a song
+smaller than the N64's own, as the N64's context holds a file handle for
+streaming that the tools' does not. libxm already adds 256 bytes when the
+tools are built for Windows (`memory_needed += 256` under `_WIN32`, as
+struct padding can differ there), so
+`wasm_tools.sh` adds them for WebAssembly too (and stops if libdragon's
+line ever changes). A song then reserves 120 bytes more than in a Docker
+build. With those taken back out of each song's header, the web builder's
+ROMs for all three games are byte for byte the Docker build's - checked
+with `build_node.mjs`, which runs `build.mjs` in Node on the same
+WebAssembly, and in Edge with the page itself, downloads included.
+
+### Building from the prebuilt program
+
+`build.sh --rom`, and the menu, use the same build: `build_node.mjs` runs
+`build.mjs` in Node, against the web builder in `build/web`, so building
+the game needs Node.js 18 or later (Pyodide's minimum, and the first with
+`fetch`) and nothing else - not Docker, and not even Python, as the
+extractor runs in Pyodide. `build/web` is kept when its page's version is
+the port's (`PORT_VERSION`), whether `--web` made it here or it was fetched
+before; otherwise the zip `--web` makes is fetched from the GitHub release
+tagged with the version, `v<version>/wolfenstein-3d-n64-web.zip`, by
+`web_tools.mjs`, which unpacks it with Node's own zlib (the zip's entries
+are stored or deflated). So each release needs that zip attached for the
+version it is tagged with, or `--rom` stops, saying so. `WOLF3D_WEB_URL`
+names another place to fetch it from, which is how this was tested before
+there was a release with it.
+
+Its ROMs are the web builder's, 120 bytes a song apart from `--compile`'s,
+and it reads the game folder itself each time, extracting nothing into
+`assets\`.
 
 ### Scenery
 
@@ -486,6 +570,22 @@ The N64 has no FM chip, so the AdLib parts go through an OPL emulator
   samples where it provably changes nothing, brought that to about 5%.
   Nothing runs once an effect has fallen 54 dB (the level the rendered
   effects' tails used to be cut at). `SFX=wav` renders them to wav64 instead.
+- **PC Speaker effects**, which the Sound menu offers in the AdLib's place
+  as DOS did, are `SDL_PCPlaySound()`: the first 87 AUDIOT chunks, each
+  sound's own PC version, with a priority and length of its own - so with
+  the PC Speaker chosen, `sound.c` takes both from those, the digitized
+  voice's priority comparisons included, as DOS's `SoundTable` followed
+  `SoundMode`. Each is a byte per 140 Hz tick, which `SDL_PCService()`
+  multiplied by 60 into channel 2 of the 8253 timer (0 disconnects the
+  speaker), so a byte b sounds at 1193181 / (60 b) Hz as a square wave.
+  `src\pcspeaker.c` makes that wave at the mixer's 22050 Hz on a channel of
+  its own, each sample the wave's exact average over the sample's span - a
+  box filter, so that high notes do not alias into low ones, while the edges
+  stay as hard as the speaker's - and its phase runs on across note changes,
+  as the timer's output did. The tools/sim checks measure a sound's length
+  and its first tone (582 Hz counted, for 585) on the extracted data. The
+  chunks, about 8 KB for all 87, are files in the ROM's filesystem
+  (`pcNN.pcs`) beside the AdLib ones, kept in RAM.
 - **Digitized sounds** are the 8-bit, 7042 Hz recordings in `VSWAP`,
   converted as they are - the shareware's 20, the full game's 46, Spear of
   Destiny's 40.
@@ -506,7 +606,7 @@ Things that look wrong and are not:
   and `wolfdigimap` names `YEAHSND`). So the extractor's tables in
   `tools\wolf_tables.py` - the enums, the digitized map, the song list and
   the stereo tables - were generated from the source text rather than typed
-  in, and are checked against it whenever `-Source` is given.
+  in, and are checked against it whenever `--source` is given.
 - **The shareware has only 20 of the 46 digitized recordings.** The list in
   `VSWAP.WL1` describes all of them, but only the "upload version" ones have
   data, so sounds such as the level-done jingle play on the FM voice - as
@@ -552,7 +652,8 @@ originals line by line. So enemies:
   are running and they are on screen;
 - take double damage before they are alerted, drop a clip (or a machine gun,
   from an SS if you have none), and give 100 (guard), 200 (dog), 400
-  (officer), 500 (SS), 700 (mutant) or 5000 (a boss) points;
+  (officer), 500 (SS), 700 (mutant), 5000 (a boss) or 2000 (a fake
+  Hitler) points;
 - follow `CalcRotate()` for which of their eight views you see.
 
 The bosses are the DOS ones too. Hans and Gretel Grosse shoot and drop the
@@ -840,9 +941,15 @@ header. The time on each floor is counted in tics during play, as
 `IN_UserInput()`, `Died()`) is a phase that gets one frame's tics at a time,
 in `WL_GAME.C`'s order:
 
-- **A new floor** fades "Get Psyched!" in, waits 70 tics (a button skips it)
-  and fades out. The first view then fizzles in, invisibly because the screen
-  is black, and the screen fades in.
+- **A new floor** fades "Get Psyched!" in with its bar empty, fills the bar,
+  waits 70 tics (a button skips it) and fades out, as `PreloadGraphics()`
+  did. DOS filled the bar as `PM_Preload()` read the floor's pages; a
+  cartridge has nothing that slow to read, so the bar fills over 35 tics,
+  about what a PC of the day took (`PSYCHED_FILL` in `game.c`). A button
+  does not cut the filling short, but one pressed meanwhile skips the wait
+  after it, as `IN_UserInput()` found it waiting. The first view then
+  fizzles in, invisibly because the screen is black, and the screen fades
+  in.
 - **The elevator** waits for its sound, then the music stops and the screen
   fades out. The stats screen fades in, and fades out again when dismissed.
 - **A death** turns to face the killer and dissolves the view to red. With a
@@ -861,7 +968,8 @@ in `WL_GAME.C`'s order:
 
 A fade is `VL_FadeOut()`/`VL_FadeIn()`: 30 steps (10 for the menus and text
 pages) that move every palette entry toward a color and back. That color is
-black, or dark red between menu screens (`MenuFadeOut()`). Moving every pixel
+black, or between menu screens (`MenuFadeOut()`) dark red - dark blue in
+Spear of Destiny. Moving every pixel
 of the finished frame the same fraction of the way is the same arithmetic.
 `main.c` does
 this on copies of the two buffers, so the stats screen keeps the pixels it
@@ -917,7 +1025,7 @@ Wolfenstein and Spear of Destiny keep a table each. DOS never had to think
 about it - the table lived in the config file, `CONFIG.WL6` or `CONFIG.SOD`,
 one per game - and here the two ROMs have names of their own, so a cartridge
 each. But one can still find the other's: a ROM built before this had one
-name for both games, and `-Name` can still give them one. So the two tables
+name for both games, and `--name` can still give them one. So the two tables
 sit side by side in the last kilobyte, each with a mark of its own, and a
 game reads and writes only its own; the saves are kept apart the same way,
 and a shared cartridge costs only the room. The scores of one would make
@@ -927,7 +1035,8 @@ view size, sound, the Extras switches, the customized controls - are shared
 on purpose: they mean the same thing in both games.
 
 A score that made it takes a name where its row is, as `US_LineInput()`
-took one: up to 57 characters or 100 pixels, with the blinking I-bar
+took one: up to 57 characters or 100 pixels (130 in Spear of Destiny,
+whose table is laid out wider), with the blinking I-bar
 cursor. The pad has no keyboard, so a strip at the foot of the screen, in
 the style of the menus' one, reads LETTER, A ADD, B ERASE, START DONE:
 
@@ -967,12 +1076,21 @@ states here, advanced a frame at a time.
   Destiny has no episodes, and goes straight to the difficulty. During a
   game it first asks whether to abandon the current one.
 - **Sound** has the three DOS groups - sound effects, digitized sound and
-  music - each with two choices, None or Nintendo 64 Audio. DOS listed the PC's
-  devices there (PC Speaker, AdLib/Sound Blaster, Disney Sound Source); the
-  N64 has one sound system, the RCP's audio mixed on the RSP, so the device
-  rows are replaced by it and the first two boxes are a row shorter. With
-  digitized sound off, the recorded sounds fall back to their AdLib versions
-  as in DOS; with effects off, only the recordings play.
+  music. DOS listed the PC's devices there (PC Speaker, AdLib/Sound
+  Blaster, Disney Sound Source). The effects keep their two kinds - None,
+  PC Speaker or AdLib - as the port synthesizes both (see Sound and music);
+  for the digitized sound and the music the N64 has one sound system, the
+  RCP's audio mixed on the RSP, so those are None or Nintendo 64 Audio, and
+  their boxes are a row shorter than DOS's. With digitized sound off, the
+  recorded sounds fall back to their PC Speaker or AdLib versions as in
+  DOS; with effects off, only the recordings play. Choosing PC Speaker
+  also turns digitized sound and music to None, for the game as it
+  sounded on a PC with no sound card - which had nothing to play either
+  on - and either can be turned back on after. That is the port's: in
+  DOS the three were independent, and greyed out only for want of the
+  hardware. The choice is kept with
+  the other settings, AdLib keeping the number it had when it was the only
+  one, so a cartridge saved before PC Speaker existed stays on AdLib.
 - **Read This!** shows the shareware's help article, its 41 pages, with the
   same text-page code as the ending. Its keyboard instructions are the
   original text. It is the shareware's alone, as in DOS: the full game as
@@ -1384,8 +1502,11 @@ overlay itself), and each
 mark reads the CPU's COUNT register. In the game, turn on Extras' Show
 Profiler to see the per-frame averages over the view.
 
-`make BENCH=1` builds a benchmark ROM instead of the game (`ROM=` names it,
-as `build.ps1 -Name` does). It starts with two
+`make BENCH=1` - `./build.sh --bench`, or the menu's "benchmark ROM" -
+builds a benchmark ROM instead of the game, which `build.sh` calls
+`Wolfenstein 3D (benchmark).z64` unless `--name` says otherwise. A stamp
+rebuilds `main.c` and `n64prof.c`, the two files `WOLF_BENCH` changes,
+whenever `BENCH` does, so the next game ROM has no benchmark in it. It starts with two
 test cards. The same one-pixel checkerboard is shown once from rows and once
 from columns, and every frame the RDP draws is read back and compared with
 the picture, pixel for pixel. Then it turns on the spot at the start of
@@ -1453,7 +1574,7 @@ proportions rather than console timings.
 
 ### Checking it without hardware
 
-`.\build.ps1 -Sim` (or `./build.sh --sim`) compiles the same libdragon-free `src\` files with the container's host
+`./build.sh --sim` compiles the same libdragon-free `src\` files with the container's host
 gcc and plays a fixed script: the start of each floor, a look at scenery on the
 first three, then walking onto pickups and printing what each one gave, a
 check that every gold door stays shut without its key and opens with it,

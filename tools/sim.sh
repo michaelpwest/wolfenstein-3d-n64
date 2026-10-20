@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the game for this computer and run the capture script - the macOS,
-# Linux and Git Bash counterpart of sim.ps1, which ./build.sh --sim runs.
+# Build the game for this computer and run the capture script, which
+# ./build.sh --sim runs - on macOS, Linux, or Windows in Git Bash.
 #
 #   ./tools/sim.sh
 #

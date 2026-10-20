@@ -6,7 +6,13 @@ game - the shareware episode, the full six-episode game, or Spear of
 Destiny - and it plays the way the DOS game did, down to id's recorded demos,
 which play out move for move as they do on a PC.
 
-**Version 1.0.0**
+**Version 1.1.0**
+
+**The easiest way to build it is in your web browser, at
+<https://michaelpwest.itch.io/wolfenstein-3d-n64>:** choose your game
+folder, click Build ROM, and download the ROM. There is nothing to install,
+and your files are not uploaded anywhere - see
+[Building in your browser](#building-in-your-browser).
 
 None of id's game data is in this repository. The build takes it from your
 copy, and the ROM it makes is for your own use only (see
@@ -24,7 +30,8 @@ copy, and the ROM it makes is for your own use only (see
   every boss - Spear of Destiny's included - and the death cam
 - All four weapons, doors and keys, secret push walls, pickups, lives, and
   id's own status bar
-- The music and sound effects
+- The music and sound effects - with the sound effects on the AdLib, or,
+  as some of us first heard them, the PC Speaker
 - The DOS menus: New Game, Sound, Control, Load and Save Game, Change View,
   View Scores, and in the shareware Read This!
 - The screens between floors, each episode's victory and ending (Spear of
@@ -49,16 +56,10 @@ The eight files are `VSWAP`, `GAMEMAPS`, `MAPHEAD`, `VGAGRAPH`, `VGADICT`,
 color palette and its opening screen are stored inside it, not in the data
 files.
 
-**To build it**, a computer running Windows, macOS or Linux, with:
-
-- [Python 3](https://www.python.org/) - nothing beyond the standard library
-- Docker, running: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-  on Windows or macOS, and Docker Desktop or Docker Engine on Linux. The
-  compiler runs inside it, and the first build sets that up by itself.
-
-The build script is `build.ps1` on Windows, run from Windows PowerShell,
-and `build.sh` on macOS and Linux, run from a terminal. `build.sh` also runs
-from Git Bash on Windows, if that is where you work.
+**To build it**, a desktop web browser - that's all (see
+[Building in your browser](#building-in-your-browser)). Or, to build it on
+your own computer instead, Node.js and a bash shell (see
+[Building with build.sh](#building-with-buildsh)).
 
 **To play it**, either:
 
@@ -66,104 +67,159 @@ from Git Bash on Windows, if that is where you work.
   - see [Running it](#running-it), since most other emulators can't run it
 - or a Nintendo 64 with a flash cart that supports SRAM saves
 
-## Building
+## Building in your browser
 
-1. **Put your game files in the `gamedata` folder** here - or leave them
-   where they are and point the build at them (below). Keep one game per
-   folder. The file names can be in capitals or not. The folder starts out
-   holding only an empty `PUT_YOUR_GAME_FILES_HERE.txt`, to mark the spot;
-   it can stay there alongside your files.
+The easiest way. Go to the web builder:
 
-2. **Check everything is in place:**
+**<https://michaelpwest.itch.io/wolfenstein-3d-n64>**
 
-       .\build.ps1          # Windows
-       ./build.sh           # macOS, Linux
+1. Click **Choose folder…** and pick the folder with your game's files - or
+   drag the folder onto the page. It says which game it found, or what is
+   missing.
+2. Optionally, type a name for the ROM.
+3. Click **Build ROM**, and when it's done, **Download**.
 
-   This builds nothing. It lists what the build needs - your game files,
-   Python, Docker - and marks anything missing, and it tells you what the
-   ROM will be called.
+It takes about half a minute for the shareware and a minute or so for the
+others, and a couple of seconds if you build again: the browser keeps the
+converted music, even after you reload the page.
 
-3. **Build the ROM:**
-
-       .\build.ps1 -Rom     # Windows
-       ./build.sh --rom     # macOS, Linux
-
-   The first build takes several minutes, because it sets up the compiler
-   first. Later builds are much quicker.
+Everything happens in your browser: your game files are not uploaded
+anywhere, and there is nothing to install. It needs a desktop browser -
+Chrome, Edge, Firefox or Safari - as phones can't choose a folder.
 
 You get **`Wolfenstein 3D.z64`** from the shareware or the full game, or
-**`Spear of Destiny.z64`** from Spear of Destiny, in this folder. The two are named
+**`Spear of Destiny.z64`** from Spear of Destiny. The two are named
 differently on purpose: emulators and flash carts keep a game's saves in a
 file named after the ROM, so each game gets its own saves and high scores.
 
-### Or with a window, on Windows
+## Building with build.sh
 
-Double-click **`build-gui.cmd`** for a window that does the same:
+The same build, run on your own computer - for offline use, or for
+scripting it. It needs a computer running Windows, macOS or Linux, with:
 
-![the build window](docs/build-window.png)
+- [Node.js](https://nodejs.org/), version 18 or later
+- a bash shell to run `build.sh` in: the Terminal on macOS and Linux, and
+  on Windows **Git Bash**, which comes with
+  [Git for Windows](https://gitforwindows.org/)
 
-- **Your game files:** it starts on this project's `gamedata` folder.
-  Browse... chooses another, and Use the gamedata folder goes back to it.
-- **What to build:** the ROM, a clean build, or the automated checks, and
-  whether to read the game files again first. The ROM name is optional, as
-  it is for the script.
-- **What the build needs** lights up before you build: green for what's
-  there, red for what's missing, amber for what the build will see to by
-  itself, and grey for what can't be checked yet. The last two lines are
-  the build's own pieces rather than things you install: the **N64
-  compiler** is a Docker image the first build makes (several minutes, once),
-  and the **game data** is your game files converted for the ROM - the line
-  names the game that's converted, and if your folder holds a different one,
-  says it's switching, and the build reads your files again by itself.
-  **Build** stays unavailable until
-  everything the build needs is green, and the line beside it says what's
-  still missing. The window checks again when you come back to it, and every
-  few seconds while Docker Desktop is starting, so the lights change by
-  themselves.
-- **Build** runs `build.ps1` and shows its output as it goes. **Stop** ends
-  the build, including the compiler working inside Docker. **Show in folder**
-  opens the folder with the ROM you just built selected.
+The first build fetches the rest, about 8 MB, from this project's GitHub
+release.
 
-It remembers your choices for next time, in `build-gui.json` beside it
-(delete that file to start from the defaults).
+Open a terminal in this folder - Git Bash on Windows - and run:
 
-### Building from somewhere else, or switching games
+    ./build.sh
 
-    .\build.ps1 -Rom -Data D:\Games\SPEAR        # Windows
-    ./build.sh --rom --data ~/games/SPEAR        # macOS, Linux
+On Windows you can double-click `build.sh` instead, once Git for Windows is
+installed: it opens in a Git Bash window, which stays open at the end until
+you press Enter.
 
-Naming a folder always reads the game from it again, so this is also how to
-switch from one game to another. Without it, a build reuses whichever game
-was read last.
+It shows what the build needs, marking anything missing, and then asks what
+to do:
 
-### Other options
+    What would you like to do?
+      1  Build the ROM                        quickest; needs only Node.js
+      2  Build the ROM in your web browser    opens a page that builds it
+      3  Build from the source code           with your own changes; needs Docker
+      q  Quit
 
-Add these to the command, as in `.\build.ps1 -Rom -Name "Wolfenstein 3D (full)"`
-or `./build.sh --rom --name "Wolfenstein 3D (full)"`:
+**Build the ROM** asks where your game files are - the `gamedata` folder
+here unless you name another; keep one game per folder, and the file names
+can be in capitals or not - says which game it found, asks what to call the
+ROM, and builds it into this folder, as quickly as the web builder does.
+Building the same game again takes a couple of seconds: the converted music
+is kept, in `build/web-cache`, and reused.
 
-| Windows | macOS, Linux | What it does |
-| --- | --- | --- |
-| `-Name "Wolfenstein 3D (full)"` | `--name "Wolfenstein 3D (full)"` | calls the ROM `Wolfenstein 3D (full).z64` instead |
-| `-Assets` | `--assets` | reads the game files in `gamedata` again, then builds |
-| `-Clean` | `--clean` | throws away everything compiled and builds it all again; the game data already read is kept (add `-Assets` or `--assets` to redo that too) |
-| `-Sim` | `--sim` | builds the game for your computer instead and runs its automated checks, saving pictures of the frames to `build/sim` |
+**Build the ROM in your web browser** runs the web builder on your own
+computer, at <http://localhost:8064>, rather than from itch.io; Ctrl+C
+stops it. **Build from the source code** is described
+[below](#building-from-the-source-code).
 
-`.\build.ps1 -Help` or `./build.sh --help` shows these, with examples.
+### Without the questions
 
-### On macOS and Linux
+Everything the menu does has an option of its own, for scripts or for
+doing it again quickly:
 
-- If `./build.sh` says "permission denied", the file lost its executable
-  mark on the way here - copying from Windows or out of a zip can do that.
-  Run `chmod +x build.sh` once, or use `bash build.sh` instead.
+    ./build.sh --rom                             # build what is in gamedata/
+    ./build.sh --rom --data ~/games/SPEAR        # ...or in another folder
+
+On Windows, Git Bash takes either kind of path: `--data "D:\Games\SPEAR"`
+or `--data /d/Games/SPEAR`.
+
+| Option | What it does |
+| --- | --- |
+| `--name "Wolfenstein 3D (full)"` | calls the ROM `Wolfenstein 3D (full).z64` instead |
+| `--serve` | starts the web builder at <http://localhost:8064> and opens it in your browser; `--port` picks another port, `--no-open` leaves the browser alone |
+
+`./build.sh --help` shows these, with examples, and what the build needs.
+
+If `./build.sh` says "permission denied", the file lost its executable mark
+on the way here - copying from Windows or out of a zip can do that. Run
+`chmod +x build.sh` once, or use `bash build.sh` instead. On Windows, run
+it in Git Bash rather than PowerShell or the Command Prompt, which can't
+run a `.sh` file.
+
+`build.sh` has been tested on macOS, in Git Bash on Windows and on Ubuntu
+Linux.
+
+## Building from the source code
+
+`./build.sh` and the web builder build the ROM from a **prebuilt program**:
+the port compiled once, for each release, which is the same for every game.
+Your own changes to the source need compiling, and that takes **Docker**,
+which holds libdragon's compiler, and Python 3. Choose **Build from the
+source code** in `./build.sh`'s menu: it checks for both first, says what to
+do about either one if it is missing, and checks again when you're ready -
+start Docker Desktop and carry on. Then it asks what to build: the ROM, the
+web builder (for a release), the automated checks, or one of two other ROMs:
+one with the audio rendered rather than sequenced or synthesized, and the
+benchmark.
+
+What it needs:
+
+- Docker, running: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+  on Windows or macOS, and Docker Desktop or Docker Engine on Linux. The
+  first build sets up the compiler inside it, which takes several minutes;
+  later builds are much quicker.
 - On Linux, Docker must work without `sudo`: add yourself to the `docker`
   group, as in Docker's
   [post-installation steps](https://docs.docker.com/engine/install/linux-postinstall/).
   The build runs the compiler as you, so what it writes - `build/` and the
   ROM - is yours.
 
-`build.sh` has been tested on Ubuntu Linux and in Git Bash on Windows, where
-it builds ROMs identical to `build.ps1`'s, and under bash 3.2, the version
-macOS includes - but not yet on a Mac.
+Without the questions, these options do the same; `./build.sh --help` lists
+them too:
+
+| Option | What it does |
+| --- | --- |
+| `--compile` | compiles the ROM from the source; `--data` and `--name` work as with `--rom` |
+| `--assets` | reads the game files in `gamedata` again, then compiles |
+| `--clean` | throws away everything compiled and builds it all again; the game data already read is kept (add `--assets` to redo that too) |
+| `--sim` | builds the game for your computer instead and runs its automated checks, saving pictures of the frames to `build/sim` |
+| `--bench` | compiles the benchmark ROM instead of the game, `Wolfenstein 3D (benchmark).z64`: it times the renderer on a few floors and ends on a table of the results |
+| `--music-wav`, `--sfx-wav` | compile the ROM with the music, or the AdLib sound effects, rendered to recordings rather than sequenced or synthesized - exact, but about 6 MB and 5 MB larger; it is named `... (rendered music).z64` and so on, so it never replaces the usual ROM |
+| `--web` | makes the web builder from the source, in `build/web`, and `build/wolfenstein-3d-n64-web.zip`; needs npm too, which fetches Pyodide the first time |
+
+With `--compile`, naming a folder reads the game from it again, so this is
+how to switch from one game to another; without it, a build reuses whichever
+game was read last.
+
+`--rom` uses `build/web` when it is this version's, so after `--web` it
+builds from your own program, changes and all, rather than the release's.
+
+### Making a release
+
+1. Set the new version in `src/wolf.h` (`PORT_VERSION`).
+2. Run `./build.sh --web` after the last change.
+3. Attach `build/wolfenstein-3d-n64-web.zip` to the GitHub release, under that name,
+   tagged `v<version>` - say `v1.1.0`. That is where `./build.sh` fetches
+   it from, so a version can't be built with it until its zip is there.
+4. Upload the same zip to itch.io as an HTML5 project, for the web builder.
+
+A ROM from the prebuilt program works exactly as one compiled here. It
+isn't byte-for-byte the same, though: libdragon's music converter, built
+for the browser, reserves 120 bytes more memory for each song, as a safety
+margin (see
+[docs/TECHNICAL_DETAILS.md](docs/TECHNICAL_DETAILS.md#the-web-builder)).
 
 ## Running it
 
@@ -239,6 +295,15 @@ battery-backed SRAM. Your settings and the high score table are kept there
 too, and saved as soon as they change. Wolfenstein and Spear of Destiny each
 keep their own saves and high scores, even on a shared cartridge.
 
+### Sound
+
+**Sound** in the main menu chooses the sound effects - None, PC Speaker or
+AdLib - and turns digitized sound and music on or off. Choosing **PC
+Speaker** gives you the game as it sounded on a PC with no sound card: the
+speaker's beeps, with digitized sound and music turned off, as there was
+nothing to play them on. Turn either back on if you'd like it with the
+beeps.
+
 ### The map and Extras
 
 **L** shows a map of what you have seen of the floor so far. The game keeps
@@ -289,6 +354,11 @@ down from it for the sound effects the
 N64 synthesizes, so **that file, and the ROM it is linked into, carry the
 LGPL** (see [Sound and music](docs/TECHNICAL_DETAILS.md#sound-and-music)), which the GPL is compatible with.
 
+The web builder also carries libdragon's tools (`audioconv64`, `mkdfs`,
+`n64tool`, `ed64romconfig`), which libdragon releases into the public
+domain, compiled with Emscripten (MIT), and Pyodide (MPL 2.0) to run the
+extractor. It lists every part's license in its `THIRD_PARTY_NOTICES.txt`.
+
 ### The data: yours, and not to be passed on
 
 The GPL covers code, not id's game data; the iPhone release says so itself
@@ -304,9 +374,10 @@ passed on.** The build takes it from you:
   extractor finds them without keeping any of either here - the palette by
   the standard EGA colors it starts with, the sign-on screen by a hash.
 
-`tools\extract_assets.py` converts those into `assets\wolf3d.dat`,
-`assets\wolfbig.dat` and `assets\audio\`, which the ROM is built from. So
-those, and any `.z64`, are derived from id's copyrighted data:
+`tools\extract_assets.py` converts those into `wolf3d.dat`, `wolfbig.dat`
+and the raw audio, which the ROM is built from - in memory, for the web
+builder and `./build.sh --rom`, or into `assets\` when building from the
+source. So those, and any `.z64`, are derived from id's copyrighted data:
 
 - The shareware release could be passed on as a **complete, unmodified
   package**. A ROM holds converted, repacked pieces of it, which is neither,

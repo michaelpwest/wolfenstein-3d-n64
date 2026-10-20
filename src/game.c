@@ -45,6 +45,13 @@ static bool fire_last;                      /* buttonheld[bt_attack]       */
 static bool use_last;                       /* buttonheld[bt_use]          */
 static bool fire_prev;                      /* last frame's Z, for acks    */
 static int  wait_tics;
+
+/* "Get Psyched!"'s bar fills over this many tics, about what PM_Preload()
+ * took on a PC of the day; psyched_fill is how far it is, and psyched_ack
+ * a button pressed meanwhile */
+#define PSYCHED_FILL 35
+static int  psyched_fill;
+static bool psyched_ack;
 static int  signon_tics;                    /* Spear's FinishSignon() wait */
 static bool fullscreen;
 static bool paused_from_map;                /* pause returns to the map    */
@@ -647,12 +654,24 @@ void game_frame(const controls_t *c, const buttons_t *b, int tics, int fps)
     /* --- a new floor --- */
     case PH_PSYCHED_IN:
         if (fade_update(tics)) {
-            wait_tics = 70;                 /* IN_UserInput(70) */
+            psyched_fill = 0;               /* PM_Preload(PreloadUpdate) */
+            psyched_ack = false;
             phase = PH_PSYCHED;
         }
         break;
 
     case PH_PSYCHED:
+        /* The bar fills first, and a button does not cut that short; but
+         * one pressed meanwhile skips the wait after, as IN_UserInput()
+         * found it waiting once PM_Preload() was done */
+        if (psyched_fill < PSYCHED_FILL) {
+            psyched_ack |= ack;
+            psyched_fill = psyched_fill + tics < PSYCHED_FILL ? psyched_fill + tics : PSYCHED_FILL;
+            psyched_bar(psyched_fill, PSYCHED_FILL);
+            if (psyched_fill == PSYCHED_FILL)
+                wait_tics = psyched_ack ? 0 : 70;   /* IN_UserInput(70) */
+            break;
+        }
         wait_tics -= tics;
         if (wait_tics <= 0 || ack) {
             fade_out(FADE_BLACK, FADESTEPS);
